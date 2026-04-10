@@ -11,6 +11,12 @@ from core.account_manager import AccountManager
 from core.session import SessionManager
 from Modelo.models import AdminUser
 
+# Función helper para iniciar la aplicación principal
+def start_home(admin_user: AdminUser, fernet_key: bytes):
+    """Inicia la ventana principal"""
+    home = HomeWindow(admin_user, fernet_key)
+    home.run()
+
 class HomeWindow:
     def __init__(self, admin_user: AdminUser, fernet_key: bytes):
         self.root = tk.Tk()
@@ -340,24 +346,16 @@ class HomeWindow:
         for item in self.accounts_tree.get_children():
             self.accounts_tree.delete(item)
         
-        search_term = self.search_var.get().lower()
-        category_filter = self.category_var.get()
-        
-        # Obtener cuentas filtradas
-        accounts = self.account_manager.accounts
-        
-        if category_filter != "Todas":
-            accounts = [acc for acc in accounts if acc.category == category_filter]
-        
-        if search_term:
-            accounts = [acc for acc in accounts 
-                       if search_term in acc.platform.lower() or 
-                          search_term in acc.email_or_username.lower()]
+        # Obtener cuentas filtradas del manager
+        accounts = self.account_manager.get_filtered_accounts(
+            search=self.search_var.get(),
+            category=self.category_var.get()
+        )
         
         # Agregar al árbol
         for account in accounts:
             self.accounts_tree.insert('', 'end',
-                                     text=account.platform,
+                                     iid=account.id,
                                      values=(account.email_or_username, account.category))
     
     def on_account_select(self, event):
@@ -367,16 +365,14 @@ class HomeWindow:
             return
         
         # Obtener cuenta seleccionada
-        item = self.accounts_tree.item(selection[0])
-        platform = item['text']
-        
-        self.selected_account = self.account_manager.get_account_by_platform(platform)
+        account_id = selection[0]
+        self.selected_account = self.account_manager.get_account_byID(account_id)
         
         if self.selected_account:
             self.show_account_details()
             self.edit_btn.config(state='normal')
             self.delete_btn.config(state='normal')
-    
+
     def show_account_details(self):
         """Muestra los detalles de la cuenta seleccionada"""
         # Ocultar mensaje de no selección
@@ -799,7 +795,7 @@ class HomeWindow:
             
             try:
                 self.account_manager.update_account(
-                    self.selected_account.platform,
+                    self.selected_account.id,
                     email_or_username=user,
                     password=password,
                     category=category,
@@ -846,7 +842,7 @@ class HomeWindow:
         
         if result:
             try:
-                self.account_manager.delete_account(self.selected_account.platform)
+                self.account_manager.delete_account(self.selected_account.id)
                 messagebox.showinfo("Éxito", "Cuenta eliminada correctamente")
                 self.selected_account = None
                 self.refresh_accounts_list()
@@ -999,10 +995,3 @@ class HomeWindow:
     def run(self):
         """Ejecuta la ventana principal"""
         self.root.mainloop()
-
-
-# Función helper para iniciar la aplicación principal
-def start_home(admin_user: AdminUser, fernet_key: bytes):
-    """Inicia la ventana principal"""
-    home = HomeWindow(admin_user, fernet_key)
-    home.run()

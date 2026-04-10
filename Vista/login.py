@@ -8,6 +8,16 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.autenticacion import autenticar_admin, verificar_2fa, obtener_codigo_2fa, generar_Admin
 from core.almacenamiento import load_json_data
 
+# Función helper para iniciar el login
+def start_login(on_success_callback):
+    """
+    Inicia la ventana de login
+    on_success_callback: función que se llama cuando el login es exitoso
+                        recibe (admin_user, fernet_key)
+    """
+    login = LoginWindow(on_success_callback)
+    login.run()
+
 class LoginWindow:
     def __init__(self, on_success_callback):
         self.root = tk.Tk()
@@ -343,12 +353,3 @@ class LoginWindow:
         self.root.mainloop()
 
 
-# Función helper para iniciar el login
-def start_login(on_success_callback):
-    """
-    Inicia la ventana de login
-    on_success_callback: función que se llama cuando el login es exitoso
-                        recibe (admin_user, fernet_key)
-    """
-    login = LoginWindow(on_success_callback)
-    login.run()

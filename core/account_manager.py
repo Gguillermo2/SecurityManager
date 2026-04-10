@@ -37,50 +37,58 @@ class AccountManager:
         self.save_all_accounts()
         return new_account
     
-    def get_account_by_platform(self, platform: str) -> Optional[Account]:
-        """Busca una cuenta por plataforma"""
-        for account in self.accounts:
-            if account.platform.lower() == platform.lower():
-                return account
-        return None
+    def get_account_byID(self, account_id: str) -> Optional[Account]:
+        return next((acc for acc in self.accounts if acc.id == account_id), None)
     
-    def get_accounts_by_category(self, category: str) -> List[Account]:
-        """Obtiene todas las cuentas de una categoría"""
-        return [acc for acc in self.accounts 
-                if acc.category.lower() == category.lower()]
-    
-    def update_account(self, platform: str, **kwargs) -> bool:
-        """Actualiza una cuenta existente"""
-        account = self.get_account_by_platform(platform)
+    def update_account(self, account_id: str, **kwargs)-> bool:
+        account = self.get_account_byID(account_id)
         if not account:
-            return False
-        
-        # Actualizar campos permitidos
-        updatable_fields = ['email_or_username', 'password', 'category', 'notes']
+            return False 
         for field, value in kwargs.items():
-            if field in updatable_fields and value is not None:
+            if value is not None:
                 setattr(account, field, value)
         
         account.updated_at = datetime.now().isoformat()
         self.save_all_accounts()
         return True
     
-    def delete_account(self, platform: str) -> bool:
-        """Elimina una cuenta"""
-        account = self.get_account_by_platform(platform)
+    def delete_account(self, account_id: str)-> bool:
+        account =  self.get_account_byID(account_id)
         if not account:
             return False
         
         self.accounts.remove(account)
         self.save_all_accounts()
         return True
+
+
+    def get_accounts_by_category(self, category: str) -> List[Account]:
+        """Obtiene todas las cuentas de una categoría"""
+        return [acc for acc in self.accounts 
+                if acc.category.lower() == category.lower()]
+    
+
     
     def search_accounts(self, query: str) -> List[Account]:
         """Busca cuentas por texto en plataforma o usuario/email"""
         query = query.lower()
         return [acc for acc in self.accounts 
                 if query in acc.platform.lower() or 
-                   query in acc.email_or_username.lower()]
+                    query in acc.email_or_username.lower()]
+    
+    def get_filtered_accounts(self, search: str = "", category: str = "Todas") -> List[Account]:
+        """Obtiene cuentas filtradas por búsqueda y categoría"""
+        accounts = self.accounts.copy()
+        if category != "Todas":
+            accounts = [acc for acc in accounts if acc.category == category]
+        if search:
+            search = search.lower()
+            accounts = [
+                acc for acc in accounts
+                if search in acc.platform.lower()
+                or search in acc.email_or_username.lower()
+            ]
+        return accounts
     
     def suggest_strong_password(self, length: int = 16) -> str:
         """Sugiere una contraseña fuerte"""
