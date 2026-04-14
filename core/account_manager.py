@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import datetime
 from Modelo.models import Account
 from core.almacenamiento import save_accounts_data, load_accounts_data
-from core.seguridad import generate_strong_password
+from core.seguridad import generate_strong_password, encrypt_data_fernet, decrypt_data_fernet
 
 class AccountManager:
     """Gestor CRUD para las cuentas de usuario"""
@@ -24,10 +24,11 @@ class AccountManager:
     def create_account(self, platform: str, email_or_username: str, 
                     password: str, category: str, notes: str = "") -> Account:
         """Crea una nueva cuenta"""
+        encrypted_password = encrypt_data_fernet(password, self.fernet_key)
         new_account = Account(
             platform=platform,
             email_or_username=email_or_username,
-            password=password,
+            password=encrypted_password,
             category=category,
             notes=notes,
             created_at=datetime.now().isoformat(),
@@ -44,6 +45,8 @@ class AccountManager:
         account = self.get_account_byID(account_id)
         if not account:
             return False 
+        if 'password' in kwargs and kwargs['password'] is not None:
+            kwargs['password'] = encrypt_data_fernet(kwargs['password'], self.fernet_key)
         for field, value in kwargs.items():
             if value is not None:
                 setattr(account, field, value)
@@ -75,6 +78,16 @@ class AccountManager:
         return [acc for acc in self.accounts 
                 if query in acc.platform.lower() or 
                     query in acc.email_or_username.lower()]
+    
+    def get_decrypted_password(self, account_id: str) -> str:
+        account = self.get_account_byID(account_id)
+        if not account:
+            return ""
+
+        try:
+            return decrypt_data_fernet(account.password, self.fernet_key)
+        except Exception:
+            return account.password
     
     def get_filtered_accounts(self, search: str = "", category: str = "Todas") -> List[Account]:
         """Obtiene cuentas filtradas por búsqueda y categoría"""

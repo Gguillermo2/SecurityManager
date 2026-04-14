@@ -5,8 +5,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.autenticacion import autenticar_admin, verificar_2fa, obtener_codigo_2fa, generar_Admin
+from core.autenticacion import autenticar_admin, generar_Admin
 from core.almacenamiento import load_json_data
+from core.seguridad import generate_totp_secret, verify_totp
 
 # Función helper para iniciar el login
 def start_login(on_success_callback):
@@ -22,7 +23,7 @@ class LoginWindow:
     def __init__(self, on_success_callback):
         self.root = tk.Tk()
         self.root.title("Gestor de Contraseñas - Login")
-        self.root.geometry("400x500")
+        self.root.geometry("600x700")
         self.root.resizable(False, False)
         
         # Callback cuando el login es exitoso
@@ -90,12 +91,6 @@ class LoginWindow:
         self.password_entry = ttk.Entry(main_frame, width=30, show="*", font=('Arial', 11))
         self.password_entry.pack(fill='x')
         
-        # Contraseña 2FA
-        ttk.Label(main_frame, text="Contraseña para 2FA:", 
-                 style='Regular.TLabel').pack(anchor='w', pady=(15, 5))
-        self.password_2fa_entry = ttk.Entry(main_frame, width=30, show="*", font=('Arial', 11))
-        self.password_2fa_entry.pack(fill='x')
-        
         # Botón crear
         create_btn = tk.Button(main_frame, 
                               text="Crear Usuario",
@@ -113,9 +108,8 @@ class LoginWindow:
         """Crea el usuario administrador"""
         username = self.username_entry.get()
         password = self.password_entry.get()
-        password_2fa = self.password_2fa_entry.get()
         
-        if not all([username, password, password_2fa]):
+        if not all([username, password]):
             messagebox.showerror("Error", "Todos los campos son obligatorios")
             return
         
@@ -125,36 +119,100 @@ class LoginWindow:
         from unittest.mock import patch
         
         # Guardar directamente sin usar input/getpass
-        from core.seguridad import hash_password_bcrypt, generate_salt
+        from core.seguridad import hash_password_bcrypt, generate_salt, generate_totp_secret
         from Modelo.models import AdminUser
         from core.almacenamiento import save_jsonD
         from base64 import urlsafe_b64encode
         
         try:
-            # Hash de contraseñas
+            # Hash de contraseña
             hashed_password = hash_password_bcrypt(password)
-            hashed_password_2fa = hash_password_bcrypt(password_2fa)
             
             # Generar salt para Fernet
             fernet_salt_bytes = generate_salt()
             fernet_salt_str = urlsafe_b64encode(fernet_salt_bytes).decode('utf-8')
             
+            # Generar secreto TOTP
+            totp_secret = generate_totp_secret()
+            
             # Crear usuario
             nuevo_admin = AdminUser(
                 username=username,
                 password=hashed_password,
-                password_2fa=hashed_password_2fa,
+                totp_secret=totp_secret,
                 fernet_key_salt=fernet_salt_str
             )
             
             # Guardar
             save_jsonD("DBusers.json", nuevo_admin.model_dump())
             
-            messagebox.showinfo("Éxito", "Usuario administrador creado correctamente")
-            self.show_login_screen()
+            # Mostrar QR
+            self.show_totp_qr(username, totp_secret)
             
         except Exception as e:
             messagebox.showerror("Error", f"Error al crear usuario: {str(e)}")
+    
+    def show_totp_qr(self, username, totp_secret):
+        """Muestra el QR para configurar TOTP"""
+        import qrcode
+        import pyotp
+        from PIL import Image, ImageTk
+        import io
+        
+        self.clear_window()
+        
+        # Frame principal
+        main_frame = tk.Frame(self.root, bg='#1e1e1e')
+        main_frame.pack(expand=True, fill='both', padx=40, pady=40)
+        
+        # Título
+        ttk.Label(main_frame, text="Configurar Autenticación TOTP", 
+                 style='Title.TLabel').pack(pady=(0, 20))
+        
+        # Instrucciones
+        ttk.Label(main_frame, 
+                 text="Escanee este código QR con su aplicación de autenticación\n(Google Authenticator, Authy, etc.)",
+                 style='Regular.TLabel',
+                 justify='center').pack(pady=(0, 20))
+        
+        # Generar QR
+        totp = pyotp.TOTP(totp_secret)
+        uri = totp.provisioning_uri(name=username, issuer_name="GestorWroser")
+        
+        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+        qr.add_data(uri)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Convertir a PhotoImage
+        bio = io.BytesIO()
+        img.save(bio, format='PNG')
+        bio.seek(0)
+        img_tk = ImageTk.PhotoImage(Image.open(bio))
+        
+        # Mostrar QR
+        qr_label = tk.Label(main_frame, image=img_tk, bg='#1e1e1e')
+        qr_label.image = img_tk  # Mantener referencia
+        qr_label.pack(pady=20)
+        
+        # Secreto como texto alternativo
+        ttk.Label(main_frame, 
+                 text=f"Si no puede escanear, ingrese manualmente:\n{totp_secret}",
+                 style='Regular.TLabel',
+                 justify='center').pack(pady=(0, 20))
+        
+        # Botón continuar
+        continue_btn = tk.Button(main_frame,
+                                text="Continuar al Login",
+                                command=self.show_login_screen,
+                                bg='#0d7377',
+                                fg='white',
+                                font=('Arial', 12, 'bold'),
+                                padx=20,
+                                pady=10,
+                                cursor='hand2',
+                                relief='flat')
+        continue_btn.pack(pady=20)
     
     def show_login_screen(self):
         """Muestra la pantalla de login"""
@@ -228,12 +286,12 @@ class LoginWindow:
         if admin_user and fernet_key:
             self.current_user = admin_user
             self.fernet_key = fernet_key
-            self.show_2fa_screen()
+            self.show_totp_screen()
         else:
             messagebox.showerror("Error", "Usuario o contraseña incorrectos")
     
-    def show_2fa_screen(self):
-        """Muestra la pantalla de 2FA"""
+    def show_totp_screen(self):
+        """Muestra la pantalla de verificación TOTP"""
         self.clear_window()
         
         # Frame principal
@@ -241,115 +299,61 @@ class LoginWindow:
         main_frame.pack(expand=True, fill='both', padx=40, pady=40)
         
         # Título
-        title = ttk.Label(main_frame, text="Verificación de Dos Factores", 
+        title = ttk.Label(main_frame, text="Verificación TOTP", 
                          style='Title.TLabel')
         title.pack(pady=(0, 30))
         
         # Instrucciones
         info_label = ttk.Label(main_frame, 
-                              text="Ingrese su contraseña de 2FA para generar el código",
+                              text="Ingrese el código de 6 dígitos de su aplicación de autenticación",
                               style='Regular.TLabel')
         info_label.pack(pady=(0, 20))
         
-        # Contraseña 2FA
-        self.password_2fa_entry = ttk.Entry(main_frame, width=30, show="*", font=('Arial', 11))
-        self.password_2fa_entry.pack(pady=10)
+        # Campo para código TOTP
+        self.totp_entry = ttk.Entry(main_frame, width=20, font=('Arial', 18), justify='center')
+        self.totp_entry.pack(pady=10)
+        self.totp_entry.focus()
         
         # Botón verificar
         verify_btn = tk.Button(main_frame,
-                              text="Verificar y Generar Código",
-                              command=self.verify_2fa,
+                              text="Verificar",
+                              command=self.verify_totp,
                               bg='#0d7377',
                               fg='white',
-                              font=('Arial', 11, 'bold'),
-                              padx=20,
-                              pady=8,
+                              font=('Arial', 12, 'bold'),
+                              padx=30,
+                              pady=10,
                               cursor='hand2',
                               relief='flat')
         verify_btn.pack(pady=20)
         
-        # Frame para el código (inicialmente oculto)
-        self.code_frame = tk.Frame(main_frame, bg='#1e1e1e')
-        self.code_frame.pack(pady=20)
+        # Bind Enter
+        self.totp_entry.bind('<Return>', lambda e: self.verify_totp())
     
-    def verify_2fa(self):
-        """Verifica la contraseña 2FA y muestra el código"""
-        password_2fa = self.password_2fa_entry.get()
+    def verify_totp(self):
+        """Verifica el código TOTP"""
+        entered_code = self.totp_entry.get().strip()
         
-        if not password_2fa:
-            messagebox.showerror("Error", "Por favor ingrese la contraseña 2FA")
+        if not entered_code:
+            messagebox.showerror("Error", "Por favor ingrese el código TOTP")
             return
         
-        # Verificar contraseña 2FA
-        from unittest.mock import patch
-        
-        with patch('getpass.getpass', return_value=password_2fa):
-            if verificar_2fa(self.current_user):
-                # Generar y mostrar código
-                code = obtener_codigo_2fa()
-                self.show_code_input(code)
+        try:
+            import pyotp
+            totp = pyotp.TOTP(self.current_user.totp_secret)
+            
+            if totp.verify(entered_code):
+                messagebox.showinfo("Éxito", "¡Autenticación completa!")
+                self.root.destroy()
+                # Llamar al callback con los datos de sesión
+                self.on_success(self.current_user, self.fernet_key)
             else:
-                messagebox.showerror("Error", "Contraseña 2FA incorrecta")
-    
-    def show_code_input(self, generated_code):
-        """Muestra el campo para ingresar el código"""
-        # Limpiar frame de código
-        for widget in self.code_frame.winfo_children():
-            widget.destroy()
-        
-        # Mostrar código generado
-        code_display = tk.Frame(self.code_frame, bg='#0d7377', relief='solid', bd=2)
-        code_display.pack(pady=10)
-        
-        tk.Label(code_display, 
-                text=f"Código: {generated_code}",
-                bg='#0d7377',
-                fg='white',
-                font=('Arial', 16, 'bold'),
-                padx=20,
-                pady=10).pack()
-        
-        # Campo para ingresar código
-        ttk.Label(self.code_frame, 
-                 text="Ingrese el código mostrado:",
-                 style='Regular.TLabel').pack(pady=(20, 5))
-        
-        self.code_entry = ttk.Entry(self.code_frame, width=20, font=('Arial', 14))
-        self.code_entry.pack(pady=5)
-        self.code_entry.focus()
-        
-        # Botón confirmar
-        confirm_btn = tk.Button(self.code_frame,
-                               text="Confirmar",
-                               command=lambda: self.confirm_code(generated_code),
-                               bg='#14ae5c',
-                               fg='white',
-                               font=('Arial', 11, 'bold'),
-                               padx=30,
-                               pady=8,
-                               cursor='hand2',
-                               relief='flat')
-        confirm_btn.pack(pady=15)
-        
-        # Bind Enter
-        self.code_entry.bind('<Return>', lambda e: self.confirm_code(generated_code))
-    
-    def confirm_code(self, correct_code):
-        """Confirma el código ingresado"""
-        entered_code = self.code_entry.get()
-        
-        if entered_code == correct_code:
-            messagebox.showinfo("Éxito", "¡Autenticación completa!")
-            self.root.destroy()
-            # Llamar al callback con los datos de sesión
-            self.on_success(self.current_user, self.fernet_key)
-        else:
-            messagebox.showerror("Error", "Código incorrecto")
-            self.code_entry.delete(0, tk.END)
-            self.code_entry.focus()
+                messagebox.showerror("Error", "Código TOTP incorrecto")
+                self.totp_entry.delete(0, tk.END)
+                self.totp_entry.focus()
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al verificar TOTP: {str(e)}")
     
     def run(self):
         """Ejecuta la ventana de login"""
         self.root.mainloop()
-
-

@@ -5,7 +5,7 @@ from typing import Optional
 class AdminUser(BaseModel):
     username: str
     password: str 
-    password_2fa: Optional[str] = None 
+    totp_secret: Optional[str] = None 
 
     fernet_key_salt: str
 
@@ -24,9 +24,3 @@ class Account(BaseModel):
     notes: Optional[str] = None  # Para notas adicionales
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
-
-class TwoFactorCode(BaseModel):
-    code: str
-    created_at: float  # timestamp
-    expires_at: float  # timestamp
-    is_used: bool = False

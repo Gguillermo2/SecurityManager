@@ -3,7 +3,6 @@ import os
 import json
 from typing import List, Dict, Optional
 from pathlib import Path
-from core.seguridad import encrypt_data_fernet, decrypt_data_fernet 
 from Modelo.models import Account
 
 # Obtener directorio de AppData
@@ -56,34 +55,22 @@ def load_json_data(filename: str) -> Optional[Dict]:
 
 def save_accounts_data(accounts: List[Account], fernet_key: bytes):
     """
-    Cifra y guarda los datos de las cuentas en el archivo JSON.
-    Requiere la clave Fernet activa de la sesión.
+    Guarda los datos de las cuentas en el archivo JSON.
+    Se asume que las contraseñas ya están cifradas en memoria.
     """
     ensure_db_directory()
-    
-    encrypted_data = []
+    accounts_data = []
     for account in accounts:
-        try:
-            # Cifrar la contraseña
-            encrypted_password = encrypt_data_fernet(account.password, fernet_key)
-            
-            # Crear diccionario con todos los campos
-            account_dict = account.model_dump()
-            account_dict['password'] = encrypted_password
-            
-            encrypted_data.append(account_dict)
-            
-        except Exception as e:
-            print(f"❌ Error al cifrar la cuenta {account.platform}: {e}")
-            continue
+        account_dict = account.model_dump()
+        accounts_data.append(account_dict)
 
-    save_jsonD(PASSWORDS_DATA_FILE, {"accounts": encrypted_data})
-    print("✅ Cuentas guardadas y cifradas exitosamente.")
+    save_jsonD(PASSWORDS_DATA_FILE, {"accounts": accounts_data})
+    print("✅ Cuentas guardadas exitosamente.")
 
 def load_accounts_data(fernet_key: bytes) -> List[Account]:
     """
-    Carga y descifra los datos de las cuentas desde el archivo JSON.
-    Requiere la clave Fernet activa de la sesión.
+    Carga los datos de las cuentas desde el archivo JSON.
+    No descifra las contraseñas aquí: quedan cifradas en memoria.
     """
     ensure_db_directory()
 
@@ -92,25 +79,12 @@ def load_accounts_data(fernet_key: bytes) -> List[Account]:
         print("ℹ️  No se encontraron datos de cuentas.")
         return []
 
-    decrypted_accounts = []
-    for encrypted_account_dict in data.get("accounts", []):
-        try:
-            # Descifrar la contraseña
-            encrypted_password = encrypted_account_dict.get('password')
-            if encrypted_password:
-                decrypted_password = decrypt_data_fernet(encrypted_password, fernet_key)
-                
-                # Reconstruir el diccionario para el modelo
-                account_data = encrypted_account_dict.copy()
-                account_data['password'] = decrypted_password
-                
-                decrypted_accounts.append(Account(**account_data))
-            else:
-                print(f"⚠️  Contraseña vacía para: {encrypted_account_dict.get('platform', 'Desconocida')}")
-                
-        except Exception as e:
-            print(f"❌ Error al descifrar cuenta {encrypted_account_dict.get('platform', 'Desconocida')}: {e}")
+    loaded_accounts = []
+    for account_dict in data.get("accounts", []):
+        if account_dict.get('password') is None:
+            print(f"⚠️  Contraseña vacía para: {account_dict.get('platform', 'Desconocida')}")
             continue
-            
-    print(f"✅ {len(decrypted_accounts)} cuenta(s) cargadas exitosamente.")
-    return decrypted_accounts
+        loaded_accounts.append(Account(**account_dict))
+
+    print(f"✅ {len(loaded_accounts)} cuenta(s) cargadas exitosamente.")
+    return loaded_accounts

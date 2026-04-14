@@ -1,6 +1,7 @@
 import os
 import bcrypt
 import random
+import pyotp
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -93,10 +94,10 @@ def generate_strong_password(length: int = 12,
     password = ''.join(random.choice(characters) for i in range(length))
     return password
 
-# --- Generación de 2FA
-def generate_2fa() -> str:
-    """
-    Genera un código 2FA numérico de 5 dígitos.
-    """
-    return "".join(str(random.randint(0,9)) for _ in range(5))
+# --- Funciones TOTP
+def generate_totp_secret():
+    return pyotp.random_base32()
+
+def verify_totp(secret, code):
+    return pyotp.TOTP(secret).verify(code)
 

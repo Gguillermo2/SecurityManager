@@ -209,7 +209,7 @@ class HomeWindow:
         
         # Treeview
         self.accounts_tree = ttk.Treeview(tree_frame,
-                                columns=('Usuario', 'Categoría'),
+                                columns=( 'Usuario', 'Categoría'),
                                 show='tree headings',
                                 yscrollcommand=scrollbar.set)
         self.accounts_tree.pack(side='left', fill='both', expand=True)
@@ -356,6 +356,7 @@ class HomeWindow:
         for account in accounts:
             self.accounts_tree.insert('', 'end',
                                      iid=account.id,
+                                     text=account.platform,
                                      values=(account.email_or_username, account.category))
     
     def on_account_select(self, event):
@@ -472,7 +473,8 @@ class HomeWindow:
     def toggle_password(self):
         """Alterna la visibilidad de la contraseña"""
         if self.password_label.cget('text').startswith('*'):
-            self.password_label.config(text=self.selected_account.password)
+            password = self.account_manager.get_decrypted_password(self.selected_account.id)
+            self.password_label.config(text=password)
         else:
             self.password_label.config(text='*' * 12)
     
@@ -506,6 +508,7 @@ class HomeWindow:
         pass_frame = tk.Frame(dialog, bg='#2d2d2d', relief='solid', bd=1)
         pass_frame.pack(padx=20, pady=10)
         
+        password = self.account_manager.get_decrypted_password(self.selected_account.id)
         password_text = tk.Text(pass_frame,
                                bg='#2d2d2d',
                                fg='white',
@@ -514,13 +517,13 @@ class HomeWindow:
                                width=30,
                                relief='flat')
         password_text.pack(padx=10, pady=10)
-        password_text.insert('1.0', self.selected_account.password)
+        password_text.insert('1.0', password)
         password_text.config(state='disabled')
         
         # Botón copiar
         def copy_password():
             self.root.clipboard_clear()
-            self.root.clipboard_append(self.selected_account.password)
+            self.root.clipboard_append(password)
             messagebox.showinfo("Copiado", "Contraseña copiada al portapapeles", parent=dialog)
             dialog.destroy()
         
@@ -733,7 +736,7 @@ class HomeWindow:
         
         password_entry = ttk.Entry(pass_frame, font=('Arial', 11), width=30)
         password_entry.pack(side='left', fill='x', expand=True)
-        password_entry.insert(0, self.selected_account.password)
+        password_entry.insert(0, self.account_manager.get_decrypted_password(self.selected_account.id))
         
         # Botón generar
         def generate_for_field():
