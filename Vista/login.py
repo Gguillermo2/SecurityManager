@@ -5,9 +5,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.autenticacion import autenticar_admin, generar_Admin
-from core.almacenamiento import load_json_data
-from core.seguridad import generate_totp_secret, verify_totp
+from core.autenticacion import admin_exists, create_admin as create_admin_user, authenticate_admin, validate_totp
 
 # Función helper para iniciar el login
 def start_login(on_success_callback):
@@ -59,8 +57,8 @@ class LoginWindow:
     
     def check_admin_exists(self):
         """Verifica si existe un usuario administrador"""
-        return load_json_data("DBusers.json") is not None
-    
+        return admin_exists()
+
     def clear_window(self):
         """Limpia todos los widgets de la ventana"""
         for widget in self.root.winfo_children():
@@ -108,47 +106,17 @@ class LoginWindow:
         """Crea el usuario administrador"""
         username = self.username_entry.get()
         password = self.password_entry.get()
-        
+
         if not all([username, password]):
             messagebox.showerror("Error", "Todos los campos son obligatorios")
             return
-        
-        # Simular la entrada para generar_Admin
-        import io
-        import contextlib
-        from unittest.mock import patch
-        
-        # Guardar directamente sin usar input/getpass
-        from core.seguridad import hash_password_bcrypt, generate_salt, generate_totp_secret
-        from Modelo.models import AdminUser
-        from core.almacenamiento import save_jsonD
-        from base64 import urlsafe_b64encode
-        
+
         try:
-            # Hash de contraseña
-            hashed_password = hash_password_bcrypt(password)
-            
-            # Generar salt para Fernet
-            fernet_salt_bytes = generate_salt()
-            fernet_salt_str = urlsafe_b64encode(fernet_salt_bytes).decode('utf-8')
-            
-            # Generar secreto TOTP
-            totp_secret = generate_totp_secret()
-            
-            # Crear usuario
-            nuevo_admin = AdminUser(
-                username=username,
-                password=hashed_password,
-                totp_secret=totp_secret,
-                fernet_key_salt=fernet_salt_str
-            )
-            
-            # Guardar
-            save_jsonD("DBusers.json", nuevo_admin.model_dump())
-            
-            # Mostrar QR
+            nuevo_admin, totp_secret = create_admin_user(username, password)
+            self.current_user = nuevo_admin
+            self.fernet_key = None
             self.show_totp_qr(username, totp_secret)
-            
+
         except Exception as e:
             messagebox.showerror("Error", f"Error al crear usuario: {str(e)}")
     
@@ -271,18 +239,13 @@ class LoginWindow:
         """Intenta hacer login con las credenciales"""
         username = self.username_entry.get()
         password = self.password_entry.get()
-        
+
         if not username or not password:
             messagebox.showerror("Error", "Por favor complete todos los campos")
             return
-        
-        # Simular entrada para autenticar_admin
-        from unittest.mock import patch
-        
-        with patch('builtins.input', side_effect=[username]):
-            with patch('getpass.getpass', return_value=password):
-                admin_user, fernet_key = autenticar_admin()
-        
+
+        admin_user, fernet_key = authenticate_admin(username, password)
+
         if admin_user and fernet_key:
             self.current_user = admin_user
             self.fernet_key = fernet_key
@@ -333,19 +296,15 @@ class LoginWindow:
     def verify_totp(self):
         """Verifica el código TOTP"""
         entered_code = self.totp_entry.get().strip()
-        
+
         if not entered_code:
             messagebox.showerror("Error", "Por favor ingrese el código TOTP")
             return
-        
+
         try:
-            import pyotp
-            totp = pyotp.TOTP(self.current_user.totp_secret)
-            
-            if totp.verify(entered_code):
+            if validate_totp(self.current_user, entered_code):
                 messagebox.showinfo("Éxito", "¡Autenticación completa!")
                 self.root.destroy()
-                # Llamar al callback con los datos de sesión
                 self.on_success(self.current_user, self.fernet_key)
             else:
                 messagebox.showerror("Error", "Código TOTP incorrecto")
