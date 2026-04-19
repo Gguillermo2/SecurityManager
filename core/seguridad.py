@@ -71,10 +71,10 @@ def decrypt_data_fernet(encrypted_data: str, fernet_key: bytes) -> str:
 
 # --- Generación de Contraseñas Fuertes
 def generate_strong_password(length: int = 12,
-                             use_uppercase: bool = True,
-                             use_lowercase: bool = True,
-                             use_digits: bool = True,
-                             use_symbols: bool = True) -> str:
+                                use_uppercase: bool = True,
+                                use_lowercase: bool = True,
+                                use_digits: bool = True,
+                                use_symbols: bool = True) -> str:
     """
     Genera una contraseña fuerte con caracteres seleccionados.
     """
