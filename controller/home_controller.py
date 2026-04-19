@@ -47,14 +47,13 @@ class HomeController:
 
     def update_account(self, account_id: str, email_or_username: Optional[str] = None,
                         password: Optional[str] = None, category: Optional[str] = None,
-                        notes: Optional[str] = None, platform: Optional[str] = None) -> bool:
+                        notes: Optional[str] = None) -> bool:
         return self.account_manager.update_account(
             account_id=account_id,
             email_or_username=email_or_username,
             password=password,
             category=category,
-            notes=notes,
-            platform=platform
+            notes=notes
         )
 
     def delete_account(self, account_id: str) -> bool:

@@ -432,103 +432,10 @@ class HomeWindow:
         except Exception as e:
             messagebox.showerror("Error", f"Error al guardar: {str(e)}", parent=dialog)
 
-    def _save_edit_account(self, dialog, platform, user, password, category, notes):
-        platform_val = platform.get().strip()
-        user_val = user.get().strip()
-        password_val = password.get().strip()
-        category_val = category.get()
-        notes_val = notes.get('1.0', 'end-1c').strip()
-
-        if not all([platform_val, user_val]):
-            messagebox.showerror("Error", "Complete los campos obligatorios", parent=dialog)
-            return
-
-        # Preparar kwargs para update
-        update_data = {
-            'platform': platform_val,
-            'email_or_username': user_val,
-            'category': category_val,
-            'notes': notes_val
-        }
-        if password_val:  # Solo actualizar contraseña si se proporciona
-            update_data['password'] = password_val
-
-        try:
-            success = self.controller.update_account(self.selected_account.id, **update_data)
-            if success:
-                messagebox.showinfo("Éxito", f"Cuenta '{platform_val}' actualizada correctamente", parent=dialog)
-                self.refresh_accounts_list()
-                # Actualizar detalles si la cuenta seleccionada cambió
-                if self.selected_account:
-                    self.selected_account = self.controller.get_account_by_id(self.selected_account.id)
-                    self.show_account_details()
-                dialog.destroy()
-            else:
-                messagebox.showerror("Error", "No se pudo actualizar la cuenta", parent=dialog)
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al actualizar: {str(e)}", parent=dialog)
-
     def edit_account(self):
         if not self.selected_account:
             messagebox.showwarning("Advertencia", "Seleccione una cuenta para editar.", parent=self.root)
             return
-
-        """Diálogo para editar cuenta existente"""
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Editar Cuenta")
-        dialog.geometry("520x620")
-        dialog.configure(bg='#1e1e1e')
-        dialog.transient(self.root)
-        dialog.grab_set()
-        # Centrar diálogo
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
-        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
-
-        main_frame = tk.Frame(dialog, bg='#1e1e1e')
-        main_frame.pack(fill='both', expand=True, padx=30, pady=25)
-
-        tk.Label(main_frame, text="Editar Cuenta", bg='#1e1e1e', fg='white',
-                    font=('Arial', 16, 'bold')).pack(pady=(0, 25))
-        
-        # Variables con valores precargados
-        platform = tk.StringVar(value=self.selected_account.platform)
-        user = tk.StringVar(value=self.selected_account.email_or_username)
-        password = tk.StringVar()  # No precargar por seguridad
-        category = tk.StringVar(value=self.selected_account.category)
-        notes = tk.StringVar()
-        
-        # Campos 
-        self._create_labeled_entry(main_frame, "Plataforma:", platform)
-        self._create_labeled_entry(main_frame, "Usuario / Email:", user)
-        self._create_labeled_entry(main_frame, "Nueva Contraseña:", password, show="*")
-
-        # Categoría
-        cat_frame = tk.Frame(main_frame, bg='#1e1e1e')
-        cat_frame.pack(fill='x', pady=8)
-        tk.Label(cat_frame, text="Categoría:", bg='#1e1e1e', fg='#888', width=15, anchor='w').pack(side='left')
-        ttk.Combobox(cat_frame, textvariable=category, 
-                    values=["General", "Redes Sociales", "Bancos", "Correo", "Otros"],
-                    state='readonly').pack(side='left', fill='x', expand=True)
-        
-        # Notas
-        tk.Label(main_frame, text="Notas:", bg='#1e1e1e', fg='#888', anchor='w').pack(fill='x', pady=(15,5))
-        notes_text = tk.Text(main_frame, height=6, bg='#2d2d2d', fg='white', relief='flat')
-        notes_text.pack(fill='x', pady=5)
-        if self.selected_account.notes:
-            notes_text.insert('1.0', self.selected_account.notes)
-
-        # Botones
-        btn_frame = tk.Frame(main_frame, bg='#1e1e1e')
-        btn_frame.pack(fill='x', pady=20)
-
-        tk.Button(btn_frame, text="Guardar Cambios", command=lambda: self._save_edit_account(
-            dialog, platform, user, password, category, notes_text),
-            bg='#14ae5c', fg='white', font=('Arial', 11, 'bold'), padx=25, pady=10).pack(side='right', padx=5)
-
-        tk.Button(btn_frame, text="Cancelar", command=dialog.destroy,
-                    bg='#555', fg='white', font=('Arial', 11), padx=25, pady=10).pack(side='right', padx=5)
 
 
     def delete_account(self):
