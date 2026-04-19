@@ -1,7 +1,7 @@
 # core/autenticacion
 from Modelo.models import AdminUser
 from core.seguridad import hash_password_bcrypt, check_password_bcrypt, generate_totp_secret, \
-                        generate_salt, generate_fernet_key_from_password
+                        generate_salt, generate_fernet_key_from_password, verify_totp as seguridad_verify_totp
 from core.almacenamiento import save_jsonD, load_json_data
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 
