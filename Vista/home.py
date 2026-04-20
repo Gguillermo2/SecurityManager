@@ -404,6 +404,72 @@ class HomeWindow:
 
         tk.Button(btn_frame, text="Cancelar", command=dialog.destroy,
                     bg='#555', fg='white', font=('Arial', 11), padx=25, pady=10).pack(side='right', padx=5)
+        
+    def edit_account(self):
+        if not self.selected_account:
+            messagebox.showwarning("Advertencia", "Seleccione una cuenta para editar.", parent=self.root)
+            return
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Editar - {self.selected_account.platform}")
+        dialog.geometry("520x650")
+        dialog.configure(bg='#1e1e1e')
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Centrar diálogo
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        main_frame = tk.Frame(dialog, bg='#1e1e1e')
+        main_frame.pack(fill='both', expand=True, padx=35, pady=25)
+
+        tk.Label(main_frame, text="Editar Cuenta", 
+                bg='#1e1e1e', fg='white', font=('Arial', 16, 'bold')).pack(pady=(0, 25))
+        
+        # variables con valores actuales
+        platform = tk.StringVar(value=self.selected_account.platform)
+        user = tk.StringVar(value=self.selected_account.email_or_username)
+        password = tk.StringVar()  # Se deja vacío por seguridad
+        category = tk.StringVar(value=self.selected_account.category or "General")
+        notes = tk.Text(main_frame, height=6, bg='#2d2d2d', fg='white', 
+                            font=('Arial', 10), relief='flat', wrap='word')
+        if self.selected_account.notes:
+            notes.insert('1.0', self.selected_account.notes)
+        # Campos
+        self._create_labeled_entry(main_frame, "Plataforma *:", platform)
+        self._create_labeled_entry(main_frame, "Usuario / Email *:", user)
+        self._create_labeled_entry(main_frame, "Nueva Contraseña (opcional):", password, show="*")
+
+        # Categoría
+        cat_frame = tk.Frame(main_frame, bg='#1e1e1e')
+        cat_frame.pack(fill='x', pady=8)
+        tk.Label(cat_frame, text="Categoría:", bg='#1e1e1e', fg='#888', width=15, anchor='w').pack(side='left')
+        ttk.Combobox(cat_frame, textvariable=category,
+                        values=["General", "Redes Sociales", "Bancos", "Correo", "Otros"],
+                        state='readonly').pack(side='left', fill='x', expand=True)
+
+        # Notas
+        tk.Label(main_frame, text="Notas:", bg='#1e1e1e', fg='#888', anchor='w').pack(fill='x', pady=(15, 5))
+        notes.pack(fill='x', pady=5)
+
+        # Botones
+        btn_frame = tk.Frame(main_frame, bg='#1e1e1e')
+        btn_frame.pack(fill='x', pady=25)
+
+        tk.Button(btn_frame, text="Guardar Cambios", 
+                    command=lambda: self._save_edited_account(
+                        dialog, platform, user, password, 
+                        category, notes),
+                    bg='#1976d2', fg='white', font=('Arial', 11, 'bold'), 
+                    padx=25, pady=10, cursor='hand2').pack(side='right', padx=5)
+
+        tk.Button(btn_frame, text="Cancelar", command=dialog.destroy,
+                    bg='#555555', fg='white', font=('Arial', 11), 
+                    padx=25, pady=10, cursor='hand2').pack(side='left', padx=5)
+        
+
 
     def _create_labeled_entry(self, parent, label_text, var, show=None):
         frame = tk.Frame(parent, bg='#1e1e1e')
@@ -432,11 +498,36 @@ class HomeWindow:
         except Exception as e:
             messagebox.showerror("Error", f"Error al guardar: {str(e)}", parent=dialog)
 
-    def edit_account(self):
-        if not self.selected_account:
-            messagebox.showwarning("Advertencia", "Seleccione una cuenta para editar.", parent=self.root)
+    def _save_edited_account(self, dialog, platform, user, password, category, notes):
+        platform = platform.get().strip()
+        username = user.get().strip()
+        new_password = password.get().strip()
+        category = category.get().strip()
+        notes = notes.get('1.0', 'end-1c').strip()
+
+        if not all([platform, username]):
+            messagebox.showerror("Error", "Plataforma y usuario son obligatorios", parent=dialog)
             return
 
+        try:
+            success = self.controller.update_account(
+                account_id=self.selected_account.id,
+                platform=platform,
+                email_or_username=username,
+                password=new_password if new_password else None,
+                category=category,
+                notes=notes
+            )
+
+            if success:
+                messagebox.showinfo("Éxito", "Cuenta actualizada correctamente", parent=dialog)
+                self.refresh_accounts_list()
+                self.show_account_details()   # Refresca el panel derecho
+                dialog.destroy()
+            else:
+                messagebox.showerror("Error", "No se pudo actualizar la cuenta", parent=dialog)
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al actualizar:\n{str(e)}", parent=dialog)
 
     def delete_account(self):
         if not self.selected_account:
