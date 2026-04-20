@@ -1,8 +1,8 @@
 # core/login_controller.py
 import pyotp
-import qrcode
-from PIL import Image, ImageTk
-import io
+#import qrcode
+#from PIL import Image, ImageTk
+#import io
 from tkinter import messagebox
 
 from core.autenticacion import generar_Admin, autenticar_admin

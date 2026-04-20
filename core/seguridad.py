@@ -1,12 +1,16 @@
 import os
 import bcrypt
-import random
+import secrets
 import pyotp
+import logging
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 from base64 import urlsafe_b64encode, urlsafe_b64decode
+
+# Configurar logging
+logger = logging.getLogger(__name__)
 
 RUTA_DBWROSER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "DBwroser")
 
@@ -76,7 +80,7 @@ def generate_strong_password(length: int = 12,
                                 use_digits: bool = True,
                                 use_symbols: bool = True) -> str:
     """
-    Genera una contraseña fuerte con caracteres seleccionados.
+    Genera una contraseña fuerte con caracteres seleccionados usando secrets para mayor seguridad.
     """
     characters = ""
     if use_lowercase:
@@ -89,9 +93,11 @@ def generate_strong_password(length: int = 12,
         characters += "!@#$%^&*()-_+=[]{}|;:,.<>?"
 
     if not characters:
+        logger.error("No se seleccionó ningún tipo de caracter para la contraseña")
         raise ValueError("Debe seleccionar al menos un tipo de caracter para la contraseña.")
 
-    password = ''.join(random.choice(characters) for i in range(length))
+    password = ''.join(secrets.choice(characters) for _ in range(length))
+    logger.debug(f"Contraseña fuerte generada con longitud {length}")
     return password
 
 # --- Funciones TOTP

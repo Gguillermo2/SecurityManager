@@ -30,7 +30,7 @@ class HomeController:
         return self.account_manager.get_filtered_accounts(search=search, category=category)
 
     def get_all_categories(self) -> List[str]:
-        return ["Todas"] + self.account_manager.get_all_categories()
+        return self.account_manager.get_all_categories()
 
     def get_account_by_id(self, account_id: str) -> Optional[Account]:
         return self.account_manager.get_account_by_id(account_id)
@@ -45,10 +45,11 @@ class HomeController:
             notes=notes
         )
 
-    def update_account(self, account_id: str, email_or_username: Optional[str] = None,
+    def update_account(self, platform: str, account_id: str, email_or_username: Optional[str] = None,
                         password: Optional[str] = None, category: Optional[str] = None,
                         notes: Optional[str] = None) -> bool:
         return self.account_manager.update_account(
+            platform=platform,
             account_id=account_id,
             email_or_username=email_or_username,
             password=password,

@@ -1,9 +1,12 @@
 # core/account_manager.py
 from typing import List, Optional, Dict
 from datetime import datetime
+import logging
 from Modelo.models import Account
 from core.almacenamiento import save_accounts_data, load_accounts_data
 from core.seguridad import generate_strong_password, encrypt_data_fernet, decrypt_data_fernet
+
+logger = logging.getLogger(__name__)
 
 
 class AccountManager:
@@ -16,11 +19,11 @@ class AccountManager:
 
     def load_accounts(self):
         """Carga todas las cuentas desde el almacenamiento"""
-        self.accounts = load_accounts_data(self.fernet_key) or []
+        self.accounts = load_accounts_data() or []
 
     def save_all_accounts(self):
         """Guarda todas las cuentas en el almacenamiento"""
-        save_accounts_data(self.accounts, self.fernet_key)
+        save_accounts_data(self.accounts)
 
     def create_account(self, platform: str, email_or_username: str, 
                         password: str, category: str = "General", notes: str = "") -> Account:
@@ -80,11 +83,13 @@ class AccountManager:
         """Retorna la contraseña descifrada"""
         account = self.get_account_by_id(account_id)
         if not account or not account.password:
+            logger.warning(f"Intento de desciframiento para cuenta no encontrada: {account_id}")
             return ""
 
         try:
             return decrypt_data_fernet(account.password, self.fernet_key)
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error al descifrar contraseña para cuenta {account_id}: {str(e)}", exc_info=True)
             return "[Error al descifrar]"
 
     # ====================== Consultas ======================
