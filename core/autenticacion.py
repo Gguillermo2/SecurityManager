@@ -1,83 +1,59 @@
 # core/autenticacion
-import getpass
 from Modelo.models import AdminUser
-# Importar las nuevas funciones de seguridad
 from core.seguridad import hash_password_bcrypt, check_password_bcrypt, generate_totp_secret, \
-                        generate_salt, generate_fernet_key_from_password
+                        generate_salt, generate_fernet_key_from_password, verify_totp as seguridad_verify_totp
 from core.almacenamiento import save_jsonD, load_json_data
-from base64 import urlsafe_b64encode, urlsafe_b64decode # Necesario para codificar/decodificar el salt
+from base64 import urlsafe_b64encode, urlsafe_b64decode
 
 UserPrincipal = "DBusers.json"
 
-# Funcion para generar usuario y Contraseña Principal
-def generar_Admin():
+
+def generar_Admin(username: str, password: str) -> tuple[bool, str]:
     """
-    Gestiona la creación inicial del usuario administrador y su contraseña 2FA.
-    Ahora incluye la generación y almacenamiento del salt para la clave Fernet.
+    Crea un nuevo usuario administrador con contraseña maestra y TOTP.
+    Retorna (True, mensaje) si se creó correctamente, o (False, mensaje) en caso contrario.
+    """
+    if not username or not password:
+        return False, "Usuario y contraseña son obligatorios"
+
+    user_data = load_json_data(UserPrincipal)
+    if user_data is not None:
+        return False, "El usuario administrador ya existe"
+
+    hashed_password = hash_password_bcrypt(password)
+    fernet_salt_bytes = generate_salt()
+    fernet_salt_str = urlsafe_b64encode(fernet_salt_bytes).decode('utf-8')
+    totp_secret = generate_totp_secret()
+
+    nuevo_admin = AdminUser(
+        username=username,
+        password=hashed_password,
+        totp_secret=totp_secret,
+        fernet_key_salt=fernet_salt_str
+    )
+
+    save_jsonD(UserPrincipal, nuevo_admin.model_dump())
+    return True, "Usuario administrador creado correctamente"
+
+
+def autenticar_admin(username: str, password: str) -> tuple[AdminUser | None, bytes | None]:
+    """
+    Autentica al administrador usando el nombre de usuario y contraseña.
+    Devuelve (AdminUser, fernet_key_bytes) cuando la autenticación es exitosa,
+    o (None, None) en caso contrario.
     """
     user_data = load_json_data(UserPrincipal)
-
     if user_data is None:
-        print("Creando nuevo usuario administrador...")
-        nombre_admin = input("Ingrese su nombre de usuario: ")
-        password = getpass.getpass("Ingrese su contraseña maestra: ")
-        
-        hashed_password = hash_password_bcrypt(password)
-        # --- NUEVO: Generar y almacenar el salt para la derivación de clave Fernet ---
-        fernet_salt_bytes = generate_salt() # Genera bytes
-        # Guardamos el salt como string base64 en el JSON
-        fernet_salt_str = urlsafe_b64encode(fernet_salt_bytes).decode('utf-8')
-
-        # Generar secreto TOTP
-        totp_secret = generate_totp_secret()
-
-        nuevo_admin = AdminUser(
-            username=nombre_admin,
-            password=hashed_password,
-            totp_secret=totp_secret,
-            fernet_key_salt=fernet_salt_str # Guardamos el salt aquí
-        )
-
-        save_jsonD(UserPrincipal, nuevo_admin.model_dump())
-        print(f"Usuario administrador '{nombre_admin}' creado correctamente con TOTP y seguridad Fernet mejorada.")
-        print(f"Secreto TOTP: {totp_secret}")
-    else:
-        print(f"El archivo de usuario maestro ya existe.")
-
-def autenticar_admin() -> tuple[AdminUser | None, bytes | None]:
-    """
-    Intenta autenticar al usuario administrador y, si tiene éxito, deriva
-    y retorna la clave Fernet para la sesión.
-    Retorna una tupla (AdminUser, fernet_key_bytes) si la autenticación es exitosa,
-    (None, None) en caso contrario.
-    """
-    user_data = load_json_data(UserPrincipal)
-
-    if user_data is None:
-        print("No se encontró un usuario administrador. Por favor, créelo primero.")
         return None, None
-    
+
     admin_user = AdminUser(**user_data)
 
-    nombre_ingresado = input("Ingrese su nombre de usuario: ")
-    password_ingresada = getpass.getpass("Ingrese su contraseña maestra: ")
-
-    if nombre_ingresado == admin_user.username and \
-       check_password_bcrypt(password_ingresada, admin_user.password):
-        print("¡Autenticación de contraseña maestra exitosa!")
-        
-        # --- NUEVO: Derivar la clave Fernet ---
+    if username == admin_user.username and check_password_bcrypt(password, admin_user.password):
         try:
-            # Decodificar el salt de string a bytes
             fernet_salt_bytes = urlsafe_b64decode(admin_user.fernet_key_salt)
-            # Derivar la clave Fernet usando la contraseña ingresada y el salt guardado
-            fernet_key_for_session = generate_fernet_key_from_password(password_ingresada, fernet_salt_bytes)
-            print("Clave Fernet derivada exitosamente para la sesión.")
+            fernet_key_for_session = generate_fernet_key_from_password(password, fernet_salt_bytes)
             return admin_user, fernet_key_for_session
-        except Exception as e:
-            print(f"Error al derivar la clave Fernet: {e}")
-            print("Puede que el archivo de usuario esté corrupto o el salt no sea válido.")
+        except Exception:
             return None, None
-    else:
-        print("Usuario o contraseña maestra incorrectos.")
-        return None, None
+
+    return None, None
