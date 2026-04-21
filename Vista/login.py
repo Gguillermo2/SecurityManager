@@ -1,239 +1,392 @@
 # Vista/login.py
-import tkinter as tk
-from tkinter import ttk, messagebox
-from PIL import Image, ImageTk
-import qrcode
 import io
 import logging
+import qrcode
+from PySide6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QLineEdit, QPushButton, QMessageBox, QFrame, QSizePolicy
+)
+from PySide6.QtGui import QPixmap, QImage, QFont, QIcon
+from PySide6.QtCore import Qt, QSize
 
 from controller.login_controller import LoginController
+#from Controladores.login_controller import LoginController
 
 logger = logging.getLogger(__name__)
 
-# Nueva función para mantener compatibilidad con main.py
-def start_login(on_success_callback):
-    """Función helper para iniciar el login desde main.py"""
-    login_window = LoginWindow(on_success_callback)
-    login_window.run()
+# ─────────────────────────── QSS Global ────────────────────────────
+LOGIN_QSS = """
+    QMainWindow, QWidget#root {
+        background-color: #1e1e1e;
+    }
+    QWidget#card {
+        background-color: #252525;
+        border-radius: 12px;
+    }
+    QLabel#title {
+        color: #ffffff;
+        font-size: 20px;
+        font-weight: bold;
+    }
+    QLabel#subtitle {
+        color: #aaaaaa;
+        font-size: 12px;
+    }
+    QLabel#field_label {
+        color: #aaaaaa;
+        font-size: 12px;
+    }
+    QLineEdit {
+        background-color: #2d2d2d;
+        color: #ffffff;
+        border: 1px solid #3a3a3a;
+        border-radius: 6px;
+        padding: 10px 14px;
+        font-size: 13px;
+    }
+    QLineEdit:focus {
+        border: 1px solid #0d9488;
+    }
+    QPushButton#primary_btn {
+        background-color: #0d9488;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: bold;
+        border: none;
+        border-radius: 6px;
+        padding: 12px 24px;
+    }
+    QPushButton#primary_btn:hover  { background-color: #0f9f93; }
+    QPushButton#primary_btn:pressed { background-color: #0a7a70; }
+    QPushButton#link_btn {
+        background: transparent;
+        color: #0d9488;
+        font-size: 12px;
+        border: none;
+        text-decoration: underline;
+    }
+    QPushButton#link_btn:hover { color: #0f9f93; }
+    QLabel#totp_input_box {
+        background-color: #2d2d2d;
+        color: #ffffff;
+        border: 1px solid #3a3a3a;
+        border-radius: 6px;
+        font-size: 28px;
+        font-weight: bold;
+        letter-spacing: 8px;
+    }
+"""
 
-class LoginWindow:
+
+# ══════════════════════════════════════════════════════════════════════
+#  Función pública de entrada (compatible con main.py)
+# ══════════════════════════════════════════════════════════════════════
+
+def start_login(on_success_callback):
+    """
+    Punto de entrada desde main.py.
+    Crea y muestra la ventana de login; on_success_callback(admin_user, fernet_key).
+    """
+    window = LoginWindow(on_success_callback)
+    window.show()
+    return window
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Ventana principal de Login
+# ══════════════════════════════════════════════════════════════════════
+
+class LoginWindow(QMainWindow):
     def __init__(self, on_success_callback):
-        self.root = tk.Tk()
-        self.root.title("Gestor de Contraseñas - Login")
-        self.root.geometry("600x700")
-        self.root.resizable(False, False)
-        
+        super().__init__()
         self.on_success = on_success_callback
         self.controller = LoginController()
-        
-        self.setup_styles()
-        
+
+        self.setWindowTitle("Gestor de Contraseñas – Login")
+        self.setFixedSize(480, 620)
+        self.setStyleSheet(LOGIN_QSS)
+
+        # Widget raíz
+        root = QWidget()
+        root.setObjectName("root")
+        self.setCentralWidget(root)
+        self._root_layout = QVBoxLayout(root)
+        self._root_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Decidir pantalla inicial
         if not self.controller.admin_exists():
-            self.show_create_admin_screen()
+            self._show_create_admin_screen()
         else:
-            self.show_login_screen()
+            self._show_login_screen()
 
-    def setup_styles(self):
-        self.root.configure(bg='#1e1e1e')
-        style = ttk.Style()
-        style.theme_use('clam')
-        style.configure('Title.TLabel', 
-                        background='#1e1e1e', 
-                        foreground='white',
-                        font=('Arial', 16, 'bold'))
-        style.configure('Regular.TLabel',
-                        background='#1e1e1e',
-                        foreground='white',
-                        font=('Arial', 10))
+    # ──────────────────── helpers de layout ──────────────────────────
 
-    def clear_window(self):
-        for widget in self.root.winfo_children():
-            widget.destroy()
+    def _clear_window(self):
+        """Elimina todos los widgets del layout raíz."""
+        while self._root_layout.count():
+            item = self._root_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
 
-    # ====================== CREAR ADMIN ======================
-    def show_create_admin_screen(self):
-        self.clear_window()
-        main_frame = tk.Frame(self.root, bg='#1e1e1e')
-        main_frame.pack(expand=True, fill='both', padx=40, pady=40)
+    def _make_card(self, parent_layout) -> tuple[QWidget, QVBoxLayout]:
+        """Crea el panel central con bordes redondeados y lo agrega al layout."""
+        wrapper = QVBoxLayout()
+        wrapper.setContentsMargins(40, 40, 40, 40)
 
-        ttk.Label(main_frame, text="Crear Usuario Administrador", 
-                    style='Title.TLabel').pack(pady=(0, 30))
+        card = QWidget()
+        card.setObjectName("card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(36, 36, 36, 36)
+        card_layout.setSpacing(14)
 
-        ttk.Label(main_frame, text="Nombre de usuario:", 
-                    style='Regular.TLabel').pack(anchor='w', pady=(10, 5))
-        self.username_entry = ttk.Entry(main_frame, width=35, font=('Arial', 11))
-        self.username_entry.pack(fill='x', pady=5)
+        wrapper.addStretch()
+        wrapper.addWidget(card)
+        wrapper.addStretch()
 
-        ttk.Label(main_frame, text="Contraseña maestra:", 
-                    style='Regular.TLabel').pack(anchor='w', pady=(15, 5))
-        self.password_entry = ttk.Entry(main_frame, width=35, show="*", font=('Arial', 11))
-        self.password_entry.pack(fill='x', pady=5)
+        container = QWidget()
+        container.setLayout(wrapper)
+        parent_layout.addWidget(container)
+        return card, card_layout
 
-        tk.Button(main_frame, text="Crear Usuario Administrador", 
-                    command=self.create_admin,
-                    bg='#0d7377', fg='white', font=('Arial', 12, 'bold'),
-                    padx=20, pady=12, cursor='hand2', relief='flat').pack(pady=30)
+    @staticmethod
+    def _label(text: str, object_name: str = "field_label",
+               alignment=Qt.AlignLeft) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setObjectName(object_name)
+        lbl.setAlignment(alignment)
+        return lbl
 
-    def create_admin(self):
-        username = self.username_entry.get().strip()
-        password = self.password_entry.get().strip()
+    @staticmethod
+    def _field(placeholder: str = "", password: bool = False) -> QLineEdit:
+        entry = QLineEdit()
+        entry.setPlaceholderText(placeholder)
+        if password:
+            entry.setEchoMode(QLineEdit.Password)
+        return entry
+
+    @staticmethod
+    def _primary_button(text: str) -> QPushButton:
+        btn = QPushButton(text)
+        btn.setObjectName("primary_btn")
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        return btn
+
+    # ──────────────────── PANTALLA CREAR ADMIN ───────────────────────
+
+    def _show_create_admin_screen(self):
+        self._clear_window()
+        _, layout = self._make_card(self._root_layout)
+
+        # Ícono y título
+        layout.addWidget(self._label("🔐", "title", Qt.AlignCenter))
+        layout.addWidget(self._label("Crear Administrador", "title", Qt.AlignCenter))
+        layout.addWidget(self._label(
+            "Configure su cuenta para comenzar",
+            "subtitle", Qt.AlignCenter
+        ))
+        layout.addSpacing(10)
+
+        # Campos
+        layout.addWidget(self._label("Nombre de usuario"))
+        self._ca_username = self._field("Ej: mi_usuario")
+        layout.addWidget(self._ca_username)
+
+        layout.addWidget(self._label("Contraseña maestra"))
+        self._ca_password = self._field("Mínimo 8 caracteres", password=True)
+        layout.addWidget(self._ca_password)
+
+        layout.addSpacing(8)
+
+        btn = self._primary_button("Crear cuenta y continuar")
+        btn.clicked.connect(self._create_admin)
+        layout.addWidget(btn)
+
+        # Enter = submit
+        self._ca_password.returnPressed.connect(self._create_admin)
+
+    def _create_admin(self):
+        username = self._ca_username.text().strip()
+        password = self._ca_password.text().strip()
 
         success, message = self.controller.create_admin(username, password)
-        
         if success:
-            messagebox.showinfo("Éxito", message)
-            self.show_totp_qr(username)
+            QMessageBox.information(self, "Cuenta creada", message)
+            self._show_totp_qr(username)
         else:
-            messagebox.showerror("Error", message)
+            QMessageBox.critical(self, "Error", message)
 
-    # ====================== QR para TOTP ======================
-    def show_totp_qr(self, username: str):
-        self.clear_window()
-        main_frame = tk.Frame(self.root, bg='#1e1e1e')
-        main_frame.pack(expand=True, fill='both', padx=40, pady=40)
+    # ──────────────────── PANTALLA QR TOTP ───────────────────────────
 
-        ttk.Label(main_frame, text="Configurar Autenticación TOTP", 
-                    style='Title.TLabel').pack(pady=(0, 20))
+    def _show_totp_qr(self, username: str):
+        self._clear_window()
+        _, layout = self._make_card(self._root_layout)
 
-        ttk.Label(main_frame, 
-                    text="Escanee este código QR con Google Authenticator, Authy, etc.",
-                    style='Regular.TLabel', justify='center').pack(pady=(0, 20))
+        layout.addWidget(self._label("Configurar Autenticador TOTP", "title", Qt.AlignCenter))
+        layout.addWidget(self._label(
+            "Escanee el QR con Google Authenticator, Authy u otra app compatible.",
+            "subtitle", Qt.AlignCenter
+        ))
+        layout.addSpacing(10)
 
         uri = self.controller.get_totp_uri(username)
-        
-        # Validar que el URI fue generado correctamente
         if not uri:
-            logger.error("URI TOTP vacío, no se puede generar QR")
-            messagebox.showerror("Error", "No se pudo generar el código QR.\nIntente de nuevo.")
-            self.show_create_admin_screen()
+            logger.error("URI TOTP vacío al intentar generar el QR.")
+            QMessageBox.critical(self, "Error", "No se pudo generar el código QR.\nIntente de nuevo.")
+            self._show_create_admin_screen()
             return
-        
+
+        # Generar imagen QR
         try:
-            qr = qrcode.QRCode(
-                version=1,
-                error_correction=qrcode.constants.ERROR_CORRECT_L,
-                box_size=10,
-                border=5
-            )
+            qr = qrcode.QRCode(version=1,
+                               error_correction=qrcode.constants.ERROR_CORRECT_L,
+                               box_size=6, border=4)
             qr.add_data(uri)
             qr.make(fit=True)
             img = qr.make_image(fill_color="black", back_color="white")
 
             bio = io.BytesIO()
-            img.save(bio, format='PNG')
+            img.save(bio, format="PNG")
             bio.seek(0)
-            img_tk = ImageTk.PhotoImage(Image.open(bio))
 
-            qr_label = tk.Label(main_frame, image=img_tk, bg='#1e1e1e')
-            qr_label.image = img_tk
-            qr_label.pack(pady=20)
-            
-            logger.info(f"QR TOTP mostrado exitosamente para {username}")
+            qimage = QImage.fromData(bio.read())
+            pixmap = QPixmap.fromImage(qimage).scaled(
+                220, 220, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+
+            qr_label = QLabel()
+            qr_label.setPixmap(pixmap)
+            qr_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(qr_label)
 
         except Exception as e:
-            logger.error(f"Error al crear QR: {e}", exc_info=True)
-            messagebox.showerror("Error", f"Error al generar código QR: {str(e)}")
-            self.show_create_admin_screen()
+            logger.error(f"Error al generar QR: {e}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"Error al generar código QR:\n{str(e)}")
+            self._show_create_admin_screen()
             return
 
-        ttk.Label(main_frame, 
-                    text=f"O ingrese manualmente:\n{self.controller.current_user.totp_secret if self.controller.current_user else ''}",
-                    style='Regular.TLabel', justify='center').pack(pady=10)
+        # Clave manual
+        secret = (self.controller.current_user.totp_secret
+                  if self.controller.current_user else "")
+        layout.addWidget(self._label("O ingrese manualmente:", "field_label", Qt.AlignCenter))
+        secret_lbl = QLabel(secret)
+        secret_lbl.setObjectName("subtitle")
+        secret_lbl.setAlignment(Qt.AlignCenter)
+        secret_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(secret_lbl)
 
-        tk.Button(main_frame, text="Continuar al Login", 
-                    command=self.show_login_screen,
-                    bg='#0d7377', fg='white', font=('Arial', 12, 'bold'),
-                    padx=20, pady=10, cursor='hand2', relief='flat').pack(pady=20)
+        layout.addSpacing(8)
+        btn = self._primary_button("Continuar al Login →")
+        btn.clicked.connect(self._show_login_screen)
+        layout.addWidget(btn)
 
-    # ====================== PANTALLA DE LOGIN ======================
-    def show_login_screen(self):
-        self.clear_window()
-        main_frame = tk.Frame(self.root, bg='#1e1e1e')
-        main_frame.pack(expand=True, fill='both', padx=40, pady=40)
+    # ──────────────────── PANTALLA LOGIN ─────────────────────────────
 
-        title_frame = tk.Frame(main_frame, bg='#1e1e1e')
-        title_frame.pack(pady=(0, 30))
-        tk.Label(title_frame, text="🔐", font=('Arial', 60), bg='#1e1e1e').pack()
-        ttk.Label(title_frame, text="Gestor de Contraseñas", 
-                    style='Title.TLabel').pack(pady=5)
+    def _show_login_screen(self):
+        self._clear_window()
+        _, layout = self._make_card(self._root_layout)
 
-        login_frame = tk.Frame(main_frame, bg='#2d2d2d')
-        login_frame.pack(fill='both', padx=30, pady=20)
-        inner = tk.Frame(login_frame, bg='#2d2d2d')
-        inner.pack(padx=30, pady=40)
+        layout.addWidget(self._label("🔐", "title", Qt.AlignCenter))
+        layout.addWidget(self._label("Gestor de Contraseñas", "title", Qt.AlignCenter))
+        layout.addWidget(self._label(
+            "Ingrese sus credenciales para continuar",
+            "subtitle", Qt.AlignCenter
+        ))
+        layout.addSpacing(16)
 
-        ttk.Label(inner, text="Usuario:", background='#2d2d2d', foreground='white', font=('Arial', 11)).grid(row=0, column=0, sticky='w', pady=12)
-        self.username_entry = ttk.Entry(inner, width=28, font=('Arial', 11))
-        self.username_entry.grid(row=0, column=1, padx=15)
+        # Separador visual
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet("color: #3a3a3a;")
+        layout.addWidget(sep)
+        layout.addSpacing(8)
 
-        ttk.Label(inner, text="Contraseña:", background='#2d2d2d', foreground='white', font=('Arial', 11)).grid(row=1, column=0, sticky='w', pady=12)
-        self.password_entry = ttk.Entry(inner, width=28, show="*", font=('Arial', 11))
-        self.password_entry.grid(row=1, column=1, padx=15)
+        layout.addWidget(self._label("Usuario"))
+        self._lg_username = self._field("Su nombre de usuario")
+        layout.addWidget(self._lg_username)
 
-        tk.Button(main_frame, text="Iniciar Sesión", 
-                    command=self.attempt_login,
-                    bg='#0d7377', fg='white', font=('Arial', 12, 'bold'),
-                    padx=40, pady=12, cursor='hand2', relief='flat').pack(pady=25)
+        layout.addWidget(self._label("Contraseña maestra"))
+        self._lg_password = self._field("••••••••", password=True)
+        layout.addWidget(self._lg_password)
 
-        self.root.bind('<Return>', lambda e: self.attempt_login())
+        layout.addSpacing(12)
+        btn = self._primary_button("Iniciar Sesión")
+        btn.clicked.connect(self._attempt_login)
+        layout.addWidget(btn)
 
-    def attempt_login(self):
-        username = self.username_entry.get().strip()
-        password = self.password_entry.get().strip()
+        self._lg_password.returnPressed.connect(self._attempt_login)
+        self._lg_username.returnPressed.connect(self._lg_password.setFocus)
+
+    def _attempt_login(self):
+        username = self._lg_username.text().strip()
+        password = self._lg_password.text().strip()
 
         if not username or not password:
-            messagebox.showerror("Error", "Por favor complete todos los campos")
+            QMessageBox.warning(self, "Campos incompletos",
+                                "Por favor complete todos los campos.")
             return
 
         success, _, _ = self.controller.authenticate(username, password)
-
         if success:
-            self.show_totp_screen()
+            self._show_totp_screen()
         else:
-            messagebox.showerror("Error", "Usuario o contraseña incorrectos")
+            QMessageBox.critical(self, "Error de autenticación",
+                                 "Usuario o contraseña incorrectos.")
+            self._lg_password.clear()
+            self._lg_password.setFocus()
 
-    # ====================== VERIFICACIÓN TOTP ======================
-    def show_totp_screen(self):
-        self.clear_window()
-        main_frame = tk.Frame(self.root, bg='#1e1e1e')
-        main_frame.pack(expand=True, fill='both', padx=40, pady=40)
+    # ──────────────────── PANTALLA TOTP ──────────────────────────────
 
-        ttk.Label(main_frame, text="Verificación de Segundo Factor", 
-                style='Title.TLabel').pack(pady=(0, 30))
+    def _show_totp_screen(self):
+        self._clear_window()
+        _, layout = self._make_card(self._root_layout)
 
-        ttk.Label(main_frame, 
-                    text="Ingrese el código de 6 dígitos de su aplicación de autenticación",
-                    style='Regular.TLabel').pack(pady=(0, 20))
+        layout.addWidget(self._label("🛡️", "title", Qt.AlignCenter))
+        layout.addWidget(self._label("Verificación en dos pasos", "title", Qt.AlignCenter))
+        layout.addWidget(self._label(
+            "Ingrese el código de 6 dígitos de su aplicación de autenticación.",
+            "subtitle", Qt.AlignCenter
+        ))
+        layout.addSpacing(20)
 
-        self.totp_entry = ttk.Entry(main_frame, width=20, font=('Arial', 20), justify='center')
-        self.totp_entry.pack(pady=15)
-        self.totp_entry.focus()
+        self._totp_entry = QLineEdit()
+        self._totp_entry.setObjectName("totp_input_box")
+        self._totp_entry.setAlignment(Qt.AlignCenter)
+        self._totp_entry.setMaxLength(6)
+        self._totp_entry.setPlaceholderText("000000")
+        self._totp_entry.setFixedHeight(64)
+        layout.addWidget(self._totp_entry)
 
-        tk.Button(main_frame, text="Verificar Código", 
-                    command=self.verify_totp,
-                    bg='#0d7377', fg='white', font=('Arial', 12, 'bold'),
-                    padx=40, pady=12, cursor='hand2', relief='flat').pack(pady=20)
+        layout.addSpacing(16)
+        btn = self._primary_button("Verificar Código")
+        btn.clicked.connect(self._verify_totp)
+        layout.addWidget(btn)
 
-        self.totp_entry.bind('<Return>', lambda e: self.verify_totp())
+        # Volver al login
+        back_btn = QPushButton("← Volver al login")
+        back_btn.setObjectName("link_btn")
+        back_btn.setCursor(Qt.PointingHandCursor)
+        back_btn.clicked.connect(self._show_login_screen)
+        layout.addWidget(back_btn, alignment=Qt.AlignCenter)
 
-    def verify_totp(self):
-        code = self.totp_entry.get().strip()
+        self._totp_entry.returnPressed.connect(self._verify_totp)
+        self._totp_entry.setFocus()
+
+    def _verify_totp(self):
+        code = self._totp_entry.text().strip()
         if not code:
-            messagebox.showerror("Error", "Por favor ingrese el código")
+            QMessageBox.warning(self, "Campo vacío", "Por favor ingrese el código.")
             return
 
         if self.controller.verify_totp_code(code):
-            messagebox.showinfo("¡Bienvenido!", "Autenticación completada exitosamente")
-            self.root.destroy()
+            QMessageBox.information(self, "¡Bienvenido!",
+                                    "Autenticación completada exitosamente.")
+            self.close()
             if self.on_success:
-                self.on_success(self.controller.current_user, self.controller.fernet_key)
+                self.on_success(self.controller.current_user,
+                                self.controller.fernet_key)
         else:
-            messagebox.showerror("Error", "Código TOTP incorrecto o expirado")
-            self.totp_entry.delete(0, tk.END)
-            self.totp_entry.focus()
-
-    def run(self):
-        """Método para iniciar la ventana"""
-        self.root.mainloop()
-
-
+            QMessageBox.critical(self, "Código incorrecto",
+                                 "El código TOTP es incorrecto o ha expirado.")
+            self._totp_entry.clear()
+            self._totp_entry.setFocus()
