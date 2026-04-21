@@ -1,9 +1,12 @@
 # core/almacenamiento.py
 import os
 import json
+import logging
 from typing import List, Dict, Optional
 from pathlib import Path
 from Modelo.models import Account
+
+logger = logging.getLogger(__name__)
 
 # Obtener directorio de AppData
 def get_appdata_dir():
@@ -34,8 +37,10 @@ def save_jsonD(filename: str, data: dict):
     try:
         with open(full_path, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
+        logger.info(f"Datos guardados correctamente en {filename}")
         print(f"✅ Datos guardados correctamente en {filename}") 
     except IOError as e:
+        logger.error(f"Error al guardar datos en {full_path}: {str(e)}", exc_info=True)
         print(f"❌ Error al guardar datos en {full_path}: {e}")
 
 def load_json_data(filename: str) -> Optional[Dict]:
@@ -46,14 +51,16 @@ def load_json_data(filename: str) -> Optional[Dict]:
             with open(full_path, "r", encoding="utf-8") as file:
                 return json.load(file)
         except json.JSONDecodeError as e:
+            logger.error(f"Error al decodificar JSON de {full_path}: {str(e)}", exc_info=True)
             print(f"❌ Error al decodificar JSON de {full_path}: {e}")
             return None
         except IOError as e:
+            logger.error(f"Error al cargar datos de {full_path}: {str(e)}", exc_info=True)
             print(f"❌ Error al cargando datos de {full_path}: {e}")
             return None
     return None   
 
-def save_accounts_data(accounts: List[Account], fernet_key: bytes):
+def save_accounts_data(accounts: List[Account]):
     """
     Guarda los datos de las cuentas en el archivo JSON.
     Se asume que las contraseñas ya están cifradas en memoria.
@@ -67,7 +74,7 @@ def save_accounts_data(accounts: List[Account], fernet_key: bytes):
     save_jsonD(PASSWORDS_DATA_FILE, {"accounts": accounts_data})
     print("✅ Cuentas guardadas exitosamente.")
 
-def load_accounts_data(fernet_key: bytes) -> List[Account]:
+def load_accounts_data() -> List[Account]:
     """
     Carga los datos de las cuentas desde el archivo JSON.
     No descifra las contraseñas aquí: quedan cifradas en memoria.
