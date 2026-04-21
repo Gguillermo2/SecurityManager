@@ -4,8 +4,11 @@ from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
 import qrcode
 import io
+import logging
 
 from controller.login_controller import LoginController
+
+logger = logging.getLogger(__name__)
 
 # Nueva función para mantener compatibilidad con main.py
 def start_login(on_success_callback):
@@ -97,19 +100,41 @@ class LoginWindow:
                     style='Regular.TLabel', justify='center').pack(pady=(0, 20))
 
         uri = self.controller.get_totp_uri(username)
-        qr = qrcode.QRCode(version=1, box_size=10, border=5)
-        qr.add_data(uri)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Validar que el URI fue generado correctamente
+        if not uri:
+            logger.error("URI TOTP vacío, no se puede generar QR")
+            messagebox.showerror("Error", "No se pudo generar el código QR.\nIntente de nuevo.")
+            self.show_create_admin_screen()
+            return
+        
+        try:
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=5
+            )
+            qr.add_data(uri)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
 
-        bio = io.BytesIO()
-        img.save(bio, format='PNG')
-        bio.seek(0)
-        img_tk = ImageTk.PhotoImage(Image.open(bio))
+            bio = io.BytesIO()
+            img.save(bio, format='PNG')
+            bio.seek(0)
+            img_tk = ImageTk.PhotoImage(Image.open(bio))
 
-        qr_label = tk.Label(main_frame, image=img_tk, bg='#1e1e1e')
-        qr_label.image = img_tk
-        qr_label.pack(pady=20)
+            qr_label = tk.Label(main_frame, image=img_tk, bg='#1e1e1e')
+            qr_label.image = img_tk
+            qr_label.pack(pady=20)
+            
+            logger.info(f"QR TOTP mostrado exitosamente para {username}")
+
+        except Exception as e:
+            logger.error(f"Error al crear QR: {e}", exc_info=True)
+            messagebox.showerror("Error", f"Error al generar código QR: {str(e)}")
+            self.show_create_admin_screen()
+            return
 
         ttk.Label(main_frame, 
                     text=f"O ingrese manualmente:\n{self.controller.current_user.totp_secret if self.controller.current_user else ''}",
