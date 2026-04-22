@@ -1,7 +1,8 @@
 # Vista/home.py
 import tkinter as tk
 from tkinter import ttk, messagebox
-from datetime import datetime
+from datetime import datetime, timedelta
+import threading
 from controller.home_controller import HomeController
 from Modelo.models import AdminUser
 
@@ -27,6 +28,10 @@ class HomeWindow:
         self.search_var = tk.StringVar()
         self.category_var = tk.StringVar(value="Todas")
         self.selected_account = None
+
+        # Cooldown para refresh_user_activity (evita llamadas demasiado frecuentes)
+        self.last_activity_refresh = datetime.now() - timedelta(seconds=31)
+        self.activity_cooldown_seconds = 30
 
         # Configuración
         self.setup_styles()
@@ -213,9 +218,11 @@ class HomeWindow:
         self.update_status_bar()
 
     def filter_accounts(self):
+        self._handle_user_activity()
         self.refresh_accounts_list()
 
     def on_account_select(self, event):
+        self._handle_user_activity()
         selection = self.accounts_tree.selection()
         if not selection:
             return
@@ -338,9 +345,12 @@ class HomeWindow:
         password_text.config(state='disabled')
 
         def copy_password():
+            self._handle_user_activity()
             self.root.clipboard_clear()
             self.root.clipboard_append(password)
             messagebox.showinfo("Copiado", "Contraseña copiada", parent=dialog)
+            # Inicia limpieza automática del portapapeles después de 30 segundos
+            self._auto_clear_clipboard(delay_seconds=30)
             dialog.destroy()
 
         tk.Button(dialog, text="📋 Copiar", command=copy_password,
@@ -481,6 +491,7 @@ class HomeWindow:
     
 
     def _save_new_account(self, dialog, platform, user, password, category, notes):
+        self._handle_user_activity()
         platform = platform.get().strip()
         user = user.get().strip()
         password = password.get().strip()
@@ -499,6 +510,7 @@ class HomeWindow:
             messagebox.showerror("Error", f"Error al guardar: {str(e)}", parent=dialog)
 
     def _save_edited_account(self, dialog, platform, user, password, category, notes):
+        self._handle_user_activity()
         platform = platform.get().strip()
         username = user.get().strip()
         new_password = password.get().strip()
@@ -530,6 +542,7 @@ class HomeWindow:
             messagebox.showerror("Error", f"Error al actualizar:\n{str(e)}", parent=dialog)
 
     def delete_account(self):
+        self._handle_user_activity()
         if not self.selected_account:
             messagebox.showwarning("Advertencia", "Seleccione una cuenta para eliminar.", parent=self.root)
             return
@@ -573,10 +586,33 @@ class HomeWindow:
                     command=lambda: self._copy_to_clipboard(password_var.get(), dialog),
                     bg='#0d7377', fg='white', font=('Arial', 11, 'bold')).pack(pady=10)
 
+    def _auto_clear_clipboard(self, delay_seconds: int = 30):
+        """
+        Limpia el portapapeles después de N segundos.
+        Se ejecuta en un thread separado para no bloquear la UI.
+        """
+        def clear():
+            import time
+            time.sleep(delay_seconds)
+            try:
+                self.root.clipboard_clear()
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Portapapeles limpiado automáticamente después de {delay_seconds}s")
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Error al limpiar portapapeles: {e}")
+        
+        thread = threading.Thread(target=clear, daemon=True)
+        thread.start()
+
     def _copy_to_clipboard(self, text: str, dialog):
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
         messagebox.showinfo("Copiado", "Contraseña copiada al portapapeles", parent=dialog)
+        # Inicia limpieza automática del portapapeles después de 30 segundos
+        self._auto_clear_clipboard(delay_seconds=30)
         dialog.destroy()
 
     def clear_details_panel(self):
@@ -587,6 +623,13 @@ class HomeWindow:
         self.selected_account = None
 
     # ====================== SESIÓN ======================
+
+    def _handle_user_activity(self):
+        """Refresca la sesión si ha pasado suficiente tiempo desde la última actividad."""
+        now = datetime.now()
+        if (now - self.last_activity_refresh).total_seconds() >= self.activity_cooldown_seconds:
+            self.controller.refresh_user_activity()
+            self.last_activity_refresh = now
 
     def check_session(self):
         if not self.controller.is_session_valid():

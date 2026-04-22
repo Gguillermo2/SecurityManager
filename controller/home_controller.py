@@ -86,6 +86,11 @@ class HomeController:
     def is_session_valid(self) -> bool:
         return self.session_manager.is_session_valid()
 
+    def refresh_user_activity(self):
+        """Refresca la sesión cuando el usuario realiza una actividad en la UI."""
+        if self.session_manager.current_user:
+            self.session_manager.refresh_session()
+
     def logout(self):
         self.session_manager.end_session()
 

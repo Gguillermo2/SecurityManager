@@ -36,14 +36,17 @@ class LoginController:
         
         return success, message
 
-    def authenticate(self, username: str, password: str) -> tuple[bool, AdminUser | None, bytes | None]:
-        """Autentica usuario + contraseña maestra."""
-        admin_user, fernet_key = autenticar_admin(username, password)
+    def authenticate(self, username: str, password: str) -> tuple[bool, AdminUser | None, bytes | None, str | None]:
+        """
+        Autentica usuario + contraseña maestra.
+        Retorna (success, admin_user, fernet_key, error_message)
+        """
+        admin_user, fernet_key, error_message = autenticar_admin(username, password)
         if admin_user and fernet_key:
             self.current_user = admin_user
             self.fernet_key = fernet_key
-            return True, admin_user, fernet_key
-        return False, None, None
+            return True, admin_user, fernet_key, None
+        return False, None, None, error_message
 
     def verify_totp_code(self, code: str) -> bool:
         """Verifica el código TOTP."""

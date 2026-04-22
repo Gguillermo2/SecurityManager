@@ -185,10 +185,13 @@ class LoginWindow:
             messagebox.showerror("Error", "Por favor complete todos los campos")
             return
 
-        success, _, _ = self.controller.authenticate(username, password)
+        success, _, _, error_message = self.controller.authenticate(username, password)
 
         if success:
             self.show_totp_screen()
+        elif error_message:
+            # Mostrar mensaje de bloqueo o error específico
+            messagebox.showerror("Error", error_message)
         else:
             messagebox.showerror("Error", "Usuario o contraseña incorrectos")
 

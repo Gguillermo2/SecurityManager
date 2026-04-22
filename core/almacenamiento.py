@@ -76,11 +76,21 @@ def initialize_database():
                 updated_at          TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                username        TEXT NOT NULL,
+                attempt_time    TEXT NOT NULL,                       -- ISO format timestamp
+                success         INTEGER NOT NULL DEFAULT 0           -- 0=failed, 1=success
+            );
+
             CREATE INDEX IF NOT EXISTS idx_accounts_platform
                 ON accounts (platform COLLATE NOCASE);
 
             CREATE INDEX IF NOT EXISTS idx_accounts_category
                 ON accounts (category);
+
+            CREATE INDEX IF NOT EXISTS idx_login_attempts_username
+                ON login_attempts (username);
         """)
     logger.info(f"Base de datos inicializada en: {DB_PATH}")
 
@@ -183,7 +193,6 @@ def load_accounts_data() -> List[Account]:
     Carga todas las cuentas desde SQLite.
     Las contraseñas siguen cifradas; el descifrado ocurre en AccountManager.
     """
-    initialize_database()          # garantiza que las tablas existen
     with get_connection() as conn:
         rows = conn.execute("SELECT * FROM accounts ORDER BY platform COLLATE NOCASE").fetchall()
 
@@ -204,8 +213,6 @@ def get_filtered_accounts_db(search: str = "", category: str = "Todas") -> List[
     """
     Filtra cuentas directamente en SQLite (más eficiente que hacerlo en Python).
     """
-    initialize_database()
-
     query = "SELECT * FROM accounts WHERE 1=1"
     params: list = []
 
@@ -228,7 +235,6 @@ def get_filtered_accounts_db(search: str = "", category: str = "Todas") -> List[
 
 def get_categories_db() -> List[str]:
     """Retorna la lista de categorías únicas existentes en la BD."""
-    initialize_database()
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT DISTINCT category FROM accounts WHERE category IS NOT NULL ORDER BY category"
@@ -238,7 +244,6 @@ def get_categories_db() -> List[str]:
 
 def get_accounts_summary_db() -> Dict:
     """Resumen estadístico para la barra de estado."""
-    initialize_database()
     with get_connection() as conn:
         total = conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
         rows = conn.execute(
@@ -250,9 +255,69 @@ def get_accounts_summary_db() -> Dict:
 
 def get_account_by_id_db(account_id: str) -> Optional[Account]:
     """Busca una cuenta por su UUID."""
-    initialize_database()
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
     if row:
         return Account(**dict(row))
     return None
+
+# ====================== GESTIÓN DE INTENTOS DE LOGIN ======================
+
+def record_login_attempt(username: str, success: bool = False):
+    """Registra un intento de login (fallido o exitoso)."""
+    from datetime import datetime
+    attempt_time = datetime.now().isoformat()
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO login_attempts (username, attempt_time, success) VALUES (?, ?, ?)",
+            (username, attempt_time, 1 if success else 0)
+        )
+    logger.debug(f"Intento de login registrado para {username}: {'exitoso' if success else 'fallido'}")
+
+
+def get_failed_login_attempts(username: str, minutes: int = 5) -> List[Dict]:
+    """
+    Obtiene los intentos de login fallidos en los últimos N minutos.
+    """
+    from datetime import datetime, timedelta
+    cutoff_time = (datetime.now() - timedelta(minutes=minutes)).isoformat()
+    
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT * FROM login_attempts 
+               WHERE username = ? AND success = 0 AND attempt_time >= ?
+               ORDER BY attempt_time DESC""",
+            (username, cutoff_time)
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def is_user_blocked(username: str, max_attempts: int = 3, lockout_minutes: int = 5) -> tuple[bool, Optional[str]]:
+    """
+    Verifica si el usuario está bloqueado por demasiados intentos fallidos.
+    Retorna (is_blocked, tiempo_restante_mensaje)
+    """
+    from datetime import datetime, timedelta
+    
+    failed_attempts = get_failed_login_attempts(username, lockout_minutes)
+    
+    if len(failed_attempts) >= max_attempts:
+        # El usuario está bloqueado
+        first_attempt_time = datetime.fromisoformat(failed_attempts[-1]["attempt_time"])
+        lockout_end_time = first_attempt_time + timedelta(minutes=lockout_minutes)
+        now = datetime.now()
+        
+        if now < lockout_end_time:
+            minutes_left = int((lockout_end_time - now).total_seconds() / 60) + 1
+            message = f"Cuenta bloqueada. Intente de nuevo en {minutes_left} minuto(s)."
+            logger.warning(f"Usuario {username} está bloqueado hasta {lockout_end_time.isoformat()}")
+            return True, message
+    
+    return False, None
+
+
+def clear_login_attempts(username: str):
+    """Limpia los intentos de login para un usuario (se usa después de login exitoso)."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM login_attempts WHERE username = ?", (username,))
+    logger.debug(f"Intentos de login limpios para {username}")

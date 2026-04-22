@@ -1,5 +1,5 @@
 # core/autenticacion.py
-from typing import Optional
+from typing import Optional, Tuple
 from Modelo.models import AdminUser
 from core.seguridad import (
     hash_password_bcrypt, check_password_bcrypt,
@@ -7,7 +7,8 @@ from core.seguridad import (
     generate_fernet_key_from_password,
 )
 from core.almacenamiento import (
-    initialize_database, save_admin_user, load_admin_user
+    save_admin_user, load_admin_user,
+    record_login_attempt, is_user_blocked, clear_login_attempts
 )
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 import logging
@@ -17,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 def admin_exists() -> bool:
     """Retorna True si ya hay un administrador registrado en la BD."""
-    initialize_database()
     return load_admin_user() is not None
 
 
@@ -26,7 +26,6 @@ def load_admin_user_data() -> Optional[dict]:
     Retorna los datos del usuario administrador como diccionario.
     Útil para crear instancia de AdminUser después de creación.
     """
-    initialize_database()
     return load_admin_user()
 
 
@@ -37,8 +36,6 @@ def generar_Admin(username: str, password: str) -> tuple[bool, str]:
     """
     if not username or not password:
         return False, "Usuario y contraseña son obligatorios"
-
-    initialize_database()
 
     if load_admin_user() is not None:
         return False, "El usuario administrador ya existe"
@@ -59,17 +56,26 @@ def generar_Admin(username: str, password: str) -> tuple[bool, str]:
     return True, "Usuario administrador creado correctamente"
 
 
-def autenticar_admin(username: str, password: str) -> tuple[AdminUser | None, bytes | None]:
+def autenticar_admin(username: str, password: str) -> Tuple[Optional[AdminUser], Optional[bytes], Optional[str]]:
     """
     Autentica al administrador con nombre de usuario y contraseña maestra.
-    Devuelve (AdminUser, fernet_key) si la autenticación es exitosa, o (None, None).
+    Devuelve (AdminUser, fernet_key, error_message) donde:
+    - Si es exitoso: (AdminUser, fernet_key, None)
+    - Si está bloqueado: (None, None, "mensaje de bloqueo")
+    - Si credenciales incorrectas: (None, None, None)
     """
-    initialize_database()
+    # Verificar si el usuario está bloqueado
+    is_blocked, block_message = is_user_blocked(username)
+    if is_blocked:
+        logger.warning(f"Intento de login para usuario bloqueado: {username}")
+        return None, None, block_message
+    
     user_data = load_admin_user()
 
     if user_data is None:
         logger.warning("Intento de autenticación sin usuario registrado.")
-        return None, None
+        record_login_attempt(username, success=False)
+        return None, None, None
 
     admin_user = AdminUser(**user_data)
 
@@ -78,10 +84,14 @@ def autenticar_admin(username: str, password: str) -> tuple[AdminUser | None, by
             fernet_salt_bytes = urlsafe_b64decode(admin_user.fernet_key_salt)
             fernet_key = generate_fernet_key_from_password(password, fernet_salt_bytes)
             logger.info(f"Autenticación exitosa para '{username}'.")
-            return admin_user, fernet_key
+            record_login_attempt(username, success=True)
+            clear_login_attempts(username)  # Limpiar intentos fallidos anteriores
+            return admin_user, fernet_key, None
         except Exception as e:
             logger.error(f"Error al derivar clave Fernet: {e}", exc_info=True)
-            return None, None
+            record_login_attempt(username, success=False)
+            return None, None, None
 
     logger.warning(f"Credenciales incorrectas para '{username}'.")
-    return None, None
+    record_login_attempt(username, success=False)
+    return None, None, None
