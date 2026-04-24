@@ -9,11 +9,6 @@ from Modelo.models import Account
 
 logger = logging.getLogger(__name__)
 
-# ====================== RUTA UNIFICADA ======================
-# Única fuente de verdad para la ubicación de datos de la app.
-# Todos los módulos (seguridad.py, autenticacion.py, etc.) deben importar
-# get_appdata_dir() desde aquí en lugar de definir su propia ruta.
-
 def get_appdata_dir() -> Path:
     """Obtiene y garantiza la existencia del directorio de datos de la app en AppData."""
     appdata = os.getenv('APPDATA') or os.path.expanduser('~')
@@ -183,7 +178,6 @@ def load_accounts_data() -> List[Account]:
     Carga todas las cuentas desde SQLite.
     Las contraseñas siguen cifradas; el descifrado ocurre en AccountManager.
     """
-    initialize_database()          # garantiza que las tablas existen
     with get_connection() as conn:
         rows = conn.execute("SELECT * FROM accounts ORDER BY platform COLLATE NOCASE").fetchall()
 
@@ -204,8 +198,6 @@ def get_filtered_accounts_db(search: str = "", category: str = "Todas") -> List[
     """
     Filtra cuentas directamente en SQLite (más eficiente que hacerlo en Python).
     """
-    initialize_database()
-
     query = "SELECT * FROM accounts WHERE 1=1"
     params: list = []
 
@@ -228,7 +220,6 @@ def get_filtered_accounts_db(search: str = "", category: str = "Todas") -> List[
 
 def get_categories_db() -> List[str]:
     """Retorna la lista de categorías únicas existentes en la BD."""
-    initialize_database()
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT DISTINCT category FROM accounts WHERE category IS NOT NULL ORDER BY category"
@@ -238,7 +229,6 @@ def get_categories_db() -> List[str]:
 
 def get_accounts_summary_db() -> Dict:
     """Resumen estadístico para la barra de estado."""
-    initialize_database()
     with get_connection() as conn:
         total = conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
         rows = conn.execute(
@@ -250,7 +240,6 @@ def get_accounts_summary_db() -> Dict:
 
 def get_account_by_id_db(account_id: str) -> Optional[Account]:
     """Busca una cuenta por su UUID."""
-    initialize_database()
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
     if row:

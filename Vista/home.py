@@ -607,6 +607,22 @@ class HomeWindow(QMainWindow):
 
     # ── Sesión ───────────────────────────────────────────────────────
 
+    def mousePressEvent(self, event):
+        """Refresca la sesión cuando hay actividad del mouse."""
+        self._refresh_session_activity()
+        super().mousePressEvent(event)
+
+    def keyPressEvent(self, event):
+        """Refresca la sesión cuando hay actividad del teclado."""
+        self._refresh_session_activity()
+        super().keyPressEvent(event)
+
+    def _refresh_session_activity(self):
+        """Renovar sesión por actividad del usuario."""
+        if self.controller.is_session_valid():
+            self.controller.session_manager.refresh_session()
+            logger.debug("Sesión renovada por actividad del usuario")
+
     def _start_session_timer(self):
         t = QTimer(self)
         t.timeout.connect(self.check_session)

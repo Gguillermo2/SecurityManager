@@ -7,7 +7,7 @@ from core.seguridad import (
     generate_fernet_key_from_password,
 )
 from core.almacenamiento import (
-    initialize_database, save_admin_user, load_admin_user
+    save_admin_user, load_admin_user
 )
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 import logging
@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 def admin_exists() -> bool:
     """Retorna True si ya hay un administrador registrado en la BD."""
-    initialize_database()
     return load_admin_user() is not None
 
 
@@ -26,7 +25,6 @@ def load_admin_user_data() -> Optional[dict]:
     Retorna los datos del usuario administrador como diccionario.
     Útil para crear instancia de AdminUser después de creación.
     """
-    initialize_database()
     return load_admin_user()
 
 
@@ -37,8 +35,6 @@ def generar_Admin(username: str, password: str) -> tuple[bool, str]:
     """
     if not username or not password:
         return False, "Usuario y contraseña son obligatorios"
-
-    initialize_database()
 
     if load_admin_user() is not None:
         return False, "El usuario administrador ya existe"
@@ -64,7 +60,6 @@ def autenticar_admin(username: str, password: str) -> tuple[AdminUser | None, by
     Autentica al administrador con nombre de usuario y contraseña maestra.
     Devuelve (AdminUser, fernet_key) si la autenticación es exitosa, o (None, None).
     """
-    initialize_database()
     user_data = load_admin_user()
 
     if user_data is None:
