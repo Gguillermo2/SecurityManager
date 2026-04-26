@@ -2,6 +2,7 @@
 .vevn/
 build/
 dist/
+logo/
 *.spec
 
 # Ignorar las carpetas __pycache__ y los archivos .pyc
@@ -12,3 +13,7 @@ __pycache__/
 # Ignorar otros archivos comunes de Python
 .vscode/
 PRO/
+*.log
+*.tmp
+*.md
+*.png

@@ -326,12 +326,12 @@ class LoginWindow(QMainWindow):
                                 "Por favor complete todos los campos.")
             return
 
-        success, _, _ = self.controller.authenticate(username, password)
+        success, _, _, error_message = self.controller.authenticate(username, password)
         if success:
             self._show_totp_screen()
         else:
-            QMessageBox.critical(self, "Error de autenticación",
-                                 "Usuario o contraseña incorrectos.")
+            # Mostrar mensaje de error específico (bloqueo, credenciales incorrectas, etc)
+            QMessageBox.critical(self, "Error de autenticación", error_message)
             self._lg_password.clear()
             self._lg_password.setFocus()
 

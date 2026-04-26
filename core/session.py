@@ -12,7 +12,7 @@ class SessionManager:
         self.current_user: Optional[AdminUser] = None
         self.fernet_key: Optional[bytes] = None
         self.session_start: Optional[datetime] = None
-        self.session_timeout: timedelta = timedelta(minutes=30)
+        self.session_timeout: timedelta = timedelta(minutes=5)  # Duración de la sesión en minutos
         
     def start_session(self, user: AdminUser, fernet_key: bytes):
         self.current_user = user
