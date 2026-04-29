@@ -16,10 +16,8 @@ def get_appdata_dir() -> Path:
     app_dir.mkdir(parents=True, exist_ok=True)
     return app_dir
 
-
 # Ruta al archivo de base de datos SQLite
 DB_PATH = get_appdata_dir() / "database.db"
-
 
 # ====================== CONEXIÓN ======================
 
@@ -71,11 +69,24 @@ def initialize_database():
                 updated_at          TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                username            TEXT NOT NULL,
+                attempt_time        TEXT NOT NULL,
+                success             BOOLEAN NOT NULL DEFAULT 0
+            );
+
             CREATE INDEX IF NOT EXISTS idx_accounts_platform
                 ON accounts (platform COLLATE NOCASE);
 
             CREATE INDEX IF NOT EXISTS idx_accounts_category
                 ON accounts (category);
+
+            CREATE INDEX IF NOT EXISTS idx_login_attempts_username
+                ON login_attempts (username);
+
+            CREATE INDEX IF NOT EXISTS idx_login_attempts_time
+                ON login_attempts (attempt_time);
         """)
     logger.info(f"Base de datos inicializada en: {DB_PATH}")
 
@@ -245,3 +256,68 @@ def get_account_by_id_db(account_id: str) -> Optional[Account]:
     if row:
         return Account(**dict(row))
     return None
+
+
+# ====================== GESTIÓN DE INTENTOS DE LOGIN ======================
+
+def record_login_attempt(username: str, success: bool = False):
+    """
+    Registra un intento de login (exitoso o fallido) con timestamp actual.
+    """
+    from datetime import datetime
+    attempt_time = datetime.now().isoformat()
+    
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO login_attempts (username, attempt_time, success)
+            VALUES (?, ?, ?)
+        """, (username, attempt_time, success))
+    
+    logger.debug(f"Intento de login registrado: {username} - Éxito: {success}")
+
+
+def get_failed_login_attempts(username: str, minutes: int = 5) -> int:
+    """
+    Retorna el número de intentos fallidos en los últimos N minutos.
+    """
+    from datetime import datetime, timedelta
+    
+    time_threshold = (datetime.now() - timedelta(minutes=minutes)).isoformat()
+    
+    with get_connection() as conn:
+        count = conn.execute("""
+            SELECT COUNT(*) FROM login_attempts
+            WHERE username = ? AND success = 0 AND attempt_time > ?
+        """, (username, time_threshold)).fetchone()[0]
+    
+    return count
+
+
+def get_last_failed_attempt_time(username: str) -> Optional[str]:
+    """
+    Retorna el timestamp del último intento fallido (para calcular tiempo de bloqueo).
+    """
+    with get_connection() as conn:
+        row = conn.execute("""
+            SELECT attempt_time FROM login_attempts
+            WHERE username = ? AND success = 0
+            ORDER BY attempt_time DESC
+            LIMIT 1
+        """, (username,)).fetchone()
+    
+    if row:
+        return row[0]
+    return None
+
+
+def clear_login_attempts(username: str):
+    """
+    Limpia todos los intentos fallidos de un usuario (después de login exitoso).
+    """
+    with get_connection() as conn:
+        conn.execute("""
+            DELETE FROM login_attempts
+            WHERE username = ? AND success = 0
+        """, (username,))
+    
+    logger.debug(f"Intentos fallidos de login limpiados para: {username}")
