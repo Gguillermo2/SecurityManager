@@ -16,10 +16,8 @@ def get_appdata_dir() -> Path:
     app_dir.mkdir(parents=True, exist_ok=True)
     return app_dir
 
-
 # Ruta al archivo de base de datos SQLite
 DB_PATH = get_appdata_dir() / "database.db"
-
 
 # ====================== CONEXIÓN ======================
 
