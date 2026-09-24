@@ -5,8 +5,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QLineEdit, QPushButton, QComboBox, QFrame,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QDialog, QTextEdit, QScrollArea, QSizePolicy, QSlider,
-    QMessageBox, QApplication
+    QDialog, QTextEdit, QScrollArea, QSlider, QMessageBox, QApplication
 )
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtCore import Qt, QTimer
@@ -16,130 +15,238 @@ from Modelo.models import AdminUser
 
 logger = logging.getLogger(__name__)
 
-# ─────────────────────────── QSS Global ────────────────────────────
+# ─────────────────────────── QSS Moderno & Pulido ────────────────────────────
 HOME_QSS = """
-    QMainWindow, QWidget { background-color: #1e1e1e; color: #ffffff; }
-
-    QWidget#header { background-color: #0d9488; }
-    QLabel#header_title { color: #ffffff; font-size: 16px; font-weight: bold; }
-    QLabel#header_user  { color: #d0f5f3; font-size: 12px; }
-
-    QWidget#left_panel  { background-color: #252525; border-radius: 8px; }
-    QWidget#right_panel { background-color: #252525; border-radius: 8px; }
-
-    QLabel#section_title { color: #ffffff; font-size: 14px; font-weight: bold; }
-    QLabel#detail_key    { color: #888888; font-size: 11px; }
-    QLabel#detail_value  { color: #ffffff; font-size: 11px; font-weight: bold; }
-    QLabel#placeholder   { color: #666666; font-size: 13px; }
-
-    QLineEdit {
-        background-color: #2d2d2d; color: #ffffff;
-        border: 1px solid #3a3a3a; border-radius: 6px;
-        padding: 8px 12px; font-size: 12px;
+    QMainWindow { 
+        background-color: #121214; 
     }
-    QLineEdit:focus { border: 1px solid #0d9488; }
+    
+    QWidget { 
+        color: #e4e4e7; 
+        font-family: 'Segoe UI', -apple-system, sans-serif;
+    }
+
+    /* Encabezado superior */
+    QFrame#header { 
+        background-color: #18181b; 
+        border-bottom: 1px solid #27272a;
+    }
+    QLabel#header_title { 
+        color: #f4f4f5; 
+        font-size: 15px; 
+        font-weight: 600; 
+    }
+    QLabel#header_user  { 
+        color: #a1a1aa; 
+        font-size: 12px; 
+    }
+
+    /* Paneles de contenido */
+    QFrame#left_panel, QFrame#right_panel { 
+        background-color: #18181b; 
+        border: 1px solid #27272a;
+        border-radius: 8px; 
+    }
+
+    QLabel#section_title { 
+        color: #f4f4f5; 
+        font-size: 14px; 
+        font-weight: 600; 
+    }
+    QLabel#detail_key    { 
+        color: #a1a1aa; 
+        font-size: 12px; 
+    }
+    QLabel#detail_value  { 
+        color: #f4f4f5; 
+        font-size: 12px; 
+        font-weight: 500; 
+    }
+    QLabel#placeholder   { 
+        color: #71717a; 
+        font-size: 13px; 
+    }
+
+    /* Inputs y Combos */
+    QLineEdit {
+        background-color: #27272a; 
+        color: #f4f4f5;
+        border: 1px solid #3f3f46; 
+        border-radius: 6px;
+        padding: 6px 12px; 
+        font-size: 12px;
+    }
+    QLineEdit:focus { 
+        border: 1px solid #6366f1; 
+    }
 
     QComboBox {
-        background-color: #2d2d2d; color: #ffffff;
-        border: 1px solid #3a3a3a; border-radius: 6px;
-        padding: 6px 10px; font-size: 12px;
+        background-color: #27272a; 
+        color: #f4f4f5;
+        border: 1px solid #3f3f46; 
+        border-radius: 6px;
+        padding: 5px 10px; 
+        font-size: 12px;
     }
-    QComboBox::drop-down { border: none; width: 22px; }
+    QComboBox::drop-down { 
+        border: none; 
+        width: 20px; 
+    }
     QComboBox QAbstractItemView {
-        background-color: #2d2d2d; color: #ffffff;
-        selection-background-color: #0d9488;
+        background-color: #27272a; 
+        color: #f4f4f5;
+        selection-background-color: #6366f1;
+        border: 1px solid #3f3f46;
     }
 
+    /* Tabla */
     QTableWidget {
-        background-color: #2d2d2d; color: #ffffff;
-        border: none; gridline-color: #3a3a3a; font-size: 12px;
+        background-color: #18181b; 
+        color: #e4e4e7;
+        border: 1px solid #27272a; 
+        border-radius: 6px;
+        gridline-color: #27272a; 
+        font-size: 12px;
     }
-    QTableWidget::item { padding: 6px 10px; }
-    QTableWidget::item:selected { background-color: #0d9488; color: #ffffff; }
+    QTableWidget::item { 
+        padding: 6px 10px; 
+        border-bottom: 1px solid #27272a;
+    }
+    QTableWidget::item:selected { 
+        background-color: #312e81; 
+        color: #ffffff; 
+    }
     QHeaderView::section {
-        background-color: #1e1e1e; color: #aaaaaa;
-        border: none; padding: 8px 10px;
-        font-size: 11px; font-weight: bold;
+        background-color: #27272a; 
+        color: #a1a1aa;
+        border: none; 
+        padding: 8px 10px;
+        font-size: 11px; 
+        font-weight: 600;
     }
 
+    /* Botones */
     QPushButton#btn_new {
-        background-color: #16a34a; color: #ffffff;
-        font-size: 12px; font-weight: bold;
-        border: none; border-radius: 6px; padding: 8px 18px;
+        background-color: #10b981; 
+        color: #ffffff;
+        font-size: 12px; 
+        font-weight: 600;
+        border: none; 
+        border-radius: 6px; 
+        padding: 6px 14px;
     }
-    QPushButton#btn_new:hover { background-color: #15803d; }
+    QPushButton#btn_new:hover { background-color: #059669; }
 
     QPushButton#btn_logout {
-        background-color: #dc2626; color: #ffffff;
-        font-size: 11px; border: none; border-radius: 5px; padding: 6px 14px;
+        background-color: #ef4444; 
+        color: #ffffff;
+        font-size: 11px; 
+        border: none; 
+        border-radius: 5px; 
+        padding: 5px 12px;
     }
-    QPushButton#btn_logout:hover { background-color: #b91c1c; }
+    QPushButton#btn_logout:hover { background-color: #dc2626; }
 
     QPushButton#btn_edit {
-        background-color: #1d4ed8; color: #ffffff;
-        font-size: 12px; border: none; border-radius: 6px; padding: 8px 16px;
+        background-color: #3b82f6; 
+        color: #ffffff;
+        font-size: 12px; 
+        border: none; 
+        border-radius: 6px; 
+        padding: 6px 14px;
     }
-    QPushButton#btn_edit:hover    { background-color: #1e40af; }
-    QPushButton#btn_edit:disabled { background-color: #374151; color: #6b7280; }
+    QPushButton#btn_edit:hover    { background-color: #2563eb; }
+    QPushButton#btn_edit:disabled { background-color: #27272a; color: #71717a; }
 
     QPushButton#btn_delete {
-        background-color: #dc2626; color: #ffffff;
-        font-size: 12px; border: none; border-radius: 6px; padding: 8px 16px;
+        background-color: #ef4444; 
+        color: #ffffff;
+        font-size: 12px; 
+        border: none; 
+        border-radius: 6px; 
+        padding: 6px 14px;
     }
-    QPushButton#btn_delete:hover    { background-color: #b91c1c; }
-    QPushButton#btn_delete:disabled { background-color: #374151; color: #6b7280; }
+    QPushButton#btn_delete:hover    { background-color: #dc2626; }
+    QPushButton#btn_delete:disabled { background-color: #27272a; color: #71717a; }
 
     QPushButton#btn_gen_pass {
-        background-color: #7c3aed; color: #ffffff;
-        font-size: 12px; border: none; border-radius: 6px; padding: 8px 16px;
+        background-color: #8b5cf6; 
+        color: #ffffff;
+        font-size: 12px; 
+        border: none; 
+        border-radius: 6px; 
+        padding: 6px 14px;
     }
-    QPushButton#btn_gen_pass:hover { background-color: #6d28d9; }
+    QPushButton#btn_gen_pass:hover { background-color: #7c3aed; }
 
     QPushButton#btn_show_pass {
-        background-color: #0d9488; color: #ffffff;
-        font-size: 11px; border: none; border-radius: 5px; padding: 4px 10px;
+        background-color: #3f3f46; 
+        color: #ffffff;
+        font-size: 11px; 
+        border: none; 
+        border-radius: 4px; 
+        padding: 2px 8px;
     }
+    QPushButton#btn_show_pass:hover { background-color: #52525b; }
+
     QPushButton#btn_primary {
-        background-color: #0d9488; color: #ffffff;
-        font-size: 12px; font-weight: bold;
-        border: none; border-radius: 6px; padding: 10px 22px;
+        background-color: #6366f1; 
+        color: #ffffff;
+        font-size: 12px; 
+        font-weight: 600;
+        border: none; 
+        border-radius: 6px; 
+        padding: 8px 18px;
     }
-    QPushButton#btn_primary:hover { background-color: #0f9f93; }
+    QPushButton#btn_primary:hover { background-color: #4f46e5; }
 
     QPushButton#btn_secondary {
-        background-color: #374151; color: #ffffff;
-        font-size: 12px; border: none; border-radius: 6px; padding: 10px 22px;
+        background-color: #27272a; 
+        color: #f4f4f5;
+        font-size: 12px; 
+        border: 1px solid #3f3f46; 
+        border-radius: 6px; 
+        padding: 8px 18px;
     }
-    QPushButton#btn_secondary:hover { background-color: #4b5563; }
+    QPushButton#btn_secondary:hover { background-color: #3f3f46; }
 
-    QPushButton#btn_purple {
-        background-color: #7c3aed; color: #ffffff;
-        font-size: 12px; border: none; border-radius: 6px; padding: 10px 22px;
+    /* Barra de Estado */
+    QFrame#status_bar { 
+        background-color: #18181b; 
+        border-top: 1px solid #27272a;
+    }
+    QLabel#status_text { 
+        color: #a1a1aa; 
+        font-size: 11px; 
     }
 
-    QWidget#status_bar { background-color: #111111; }
-    QLabel#status_text { color: #666666; font-size: 10px; }
-
-    QDialog { background-color: #1e1e1e; }
+    /* Modal / Dialog */
+    QDialog { background-color: #18181b; }
     QTextEdit {
-        background-color: #2d2d2d; color: #ffffff;
-        border: 1px solid #3a3a3a; border-radius: 6px;
-        font-size: 12px; padding: 6px;
+        background-color: #27272a; 
+        color: #f4f4f5;
+        border: 1px solid #3f3f46; 
+        border-radius: 6px;
+        font-size: 12px; 
+        padding: 6px;
     }
     QScrollBar:vertical {
-        background-color: #2d2d2d; width: 8px; border-radius: 4px;
+        background-color: #18181b; 
+        width: 8px; 
+        border-radius: 4px;
     }
-    QScrollBar::handle:vertical { background-color: #4a4a4a; border-radius: 4px; }
+    QScrollBar::handle:vertical { 
+        background-color: #3f3f46; 
+        border-radius: 4px; 
+    }
 """
 
-# ══════════════════════════════════════════════════════════════════════
 def start_home(admin_user: AdminUser, fernet_key: bytes):
     window = HomeWindow(admin_user, fernet_key)
     window.show()
     return window
 
 
-# ══════════════════════════════════════════════════════════════════════
 class HomeWindow(QMainWindow):
     def __init__(self, admin_user: AdminUser, fernet_key: bytes):
         super().__init__()
@@ -156,8 +263,6 @@ class HomeWindow(QMainWindow):
         self.refresh_accounts_list()
         self._start_session_timer()
 
-    # ── Construcción UI ──────────────────────────────────────────────
-
     def _build_ui(self):
         root = QWidget()
         self.setCentralWidget(root)
@@ -165,26 +270,35 @@ class HomeWindow(QMainWindow):
         vbox.setContentsMargins(0, 0, 0, 0)
         vbox.setSpacing(0)
 
+        # Header como QFrame para un control de bordes y fondo perfecto
         vbox.addWidget(self._build_header())
 
+        # Contenedor central con padding para separar paneles
+        center_container = QWidget()
+        center_layout = QVBoxLayout(center_container)
+        center_layout.setContentsMargins(12, 12, 12, 12)
+
         splitter = QSplitter(Qt.Horizontal)
-        splitter.setHandleWidth(1)
-        splitter.setStyleSheet("QSplitter::handle { background-color: #333333; }")
+        splitter.setHandleWidth(6)
+        splitter.setStyleSheet("QSplitter::handle { background-color: transparent; }")
         splitter.addWidget(self._build_left_panel())
         splitter.addWidget(self._build_right_panel())
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         splitter.setSizes([650, 400])
-        vbox.addWidget(splitter, 1)
 
+        center_layout.addWidget(splitter)
+        vbox.addWidget(center_container, 1)
+
+        # Status Bar como QFrame
         vbox.addWidget(self._build_status_bar())
 
     def _build_header(self) -> QWidget:
-        h = QWidget()
+        h = QFrame()
         h.setObjectName("header")
-        h.setFixedHeight(56)
+        h.setFixedHeight(50)
         hl = QHBoxLayout(h)
-        hl.setContentsMargins(20, 0, 20, 0)
+        hl.setContentsMargins(16, 0, 16, 0)
 
         title = QLabel("🔐  Gestor de Contraseñas")
         title.setObjectName("header_title")
@@ -203,13 +317,12 @@ class HomeWindow(QMainWindow):
         return h
 
     def _build_left_panel(self) -> QWidget:
-        panel = QWidget()
+        panel = QFrame()
         panel.setObjectName("left_panel")
         vbox = QVBoxLayout(panel)
         vbox.setContentsMargins(14, 14, 14, 14)
         vbox.setSpacing(10)
 
-        # Título + botón
         top = QHBoxLayout()
         lbl = QLabel("Cuentas Guardadas")
         lbl.setObjectName("section_title")
@@ -222,7 +335,6 @@ class HomeWindow(QMainWindow):
         top.addWidget(new_btn)
         vbox.addLayout(top)
 
-        # Búsqueda + filtro
         search_row = QHBoxLayout()
         self._search_input = QLineEdit()
         self._search_input.setPlaceholderText("🔍  Buscar plataforma o usuario…")
@@ -235,7 +347,6 @@ class HomeWindow(QMainWindow):
         search_row.addWidget(self._category_combo, 2)
         vbox.addLayout(search_row)
 
-        # Tabla
         self._table = QTableWidget()
         self._table.setColumnCount(3)
         self._table.setHorizontalHeaderLabels(["Plataforma", "Usuario / Email", "Categoría"])
@@ -253,7 +364,7 @@ class HomeWindow(QMainWindow):
         return panel
 
     def _build_right_panel(self) -> QWidget:
-        panel = QWidget()
+        panel = QFrame()
         panel.setObjectName("right_panel")
         vbox = QVBoxLayout(panel)
         vbox.setContentsMargins(16, 16, 16, 16)
@@ -265,10 +376,9 @@ class HomeWindow(QMainWindow):
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("color: #333333;")
+        sep.setStyleSheet("color: #27272a;")
         vbox.addWidget(sep)
 
-        # Área scrollable
         self._details_scroll = QScrollArea()
         self._details_scroll.setWidgetResizable(True)
         self._details_scroll.setFrameShape(QFrame.NoFrame)
@@ -285,10 +395,9 @@ class HomeWindow(QMainWindow):
 
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.HLine)
-        sep2.setStyleSheet("color: #333333;")
+        sep2.setStyleSheet("color: #27272a;")
         vbox.addWidget(sep2)
 
-        # Acciones
         actions = QHBoxLayout()
         self._edit_btn = QPushButton("✏  Editar")
         self._edit_btn.setObjectName("btn_edit")
@@ -316,9 +425,9 @@ class HomeWindow(QMainWindow):
         return panel
 
     def _build_status_bar(self) -> QWidget:
-        bar = QWidget()
+        bar = QFrame()
         bar.setObjectName("status_bar")
-        bar.setFixedHeight(26)
+        bar.setFixedHeight(28)
         hl = QHBoxLayout(bar)
         hl.setContentsMargins(12, 0, 12, 0)
 
@@ -336,8 +445,6 @@ class HomeWindow(QMainWindow):
         clock.start(1000)
         self._update_clock()
         return bar
-
-    # ── Detalles ─────────────────────────────────────────────────────
 
     def _clear_details(self):
         while self._details_layout.count():
@@ -381,7 +488,6 @@ class HomeWindow(QMainWindow):
         self._details_layout.addWidget(_row("Usuario / Email:", acc.email_or_username))
         self._details_layout.addWidget(_row("Categoría:", acc.category or "—"))
 
-        # Fila contraseña con toggle
         pw = QWidget()
         pw.setStyleSheet("background:transparent;")
         phl = QHBoxLayout(pw)
@@ -394,7 +500,7 @@ class HomeWindow(QMainWindow):
         self._pass_value_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
         toggle_btn = QPushButton("👁")
         toggle_btn.setObjectName("btn_show_pass")
-        toggle_btn.setFixedSize(32, 26)
+        toggle_btn.setFixedSize(32, 24)
         toggle_btn.setCursor(Qt.PointingHandCursor)
         toggle_btn.clicked.connect(self.toggle_password)
         phl.addWidget(pk)
@@ -430,8 +536,6 @@ class HomeWindow(QMainWindow):
             self._pass_value_lbl.setText("● ● ● ● ● ● ● ● ●")
             self._pass_visible = False
 
-    # ── Tabla ────────────────────────────────────────────────────────
-
     def refresh_accounts_list(self):
         accounts = self.controller.get_filtered_accounts(
             search=self._search_input.text(),
@@ -449,7 +553,6 @@ class HomeWindow(QMainWindow):
 
         self._update_status_bar()
 
-        # Refrescar combo categorías sin perder la selección
         current = self._category_combo.currentText()
         self._category_combo.blockSignals(True)
         self._category_combo.clear()
@@ -479,8 +582,6 @@ class HomeWindow(QMainWindow):
         self._edit_btn.setEnabled(False)
         self._delete_btn.setEnabled(False)
         self.selected_account = None
-
-    # ── Diálogos ─────────────────────────────────────────────────────
 
     def show_password(self):
         if not self.selected_account:
@@ -593,32 +694,25 @@ class HomeWindow(QMainWindow):
         dlg = _PasswordGeneratorDialog(self, self.controller)
         dlg.exec()
 
-    # ── Utilidades ───────────────────────────────────────────────────
-
     def _update_status_bar(self):
         summary = self.controller.get_accounts_summary()
         parts = [f"Total: {summary['total']}"]
         for cat, count in summary["by_category"].items():
             parts.append(f"{cat}: {count}")
-        self._status_lbl.setText("  |  ".join(parts))
+        self._status_lbl.setText("  •  ".join(parts))
 
     def _update_clock(self):
         self._time_lbl.setText(datetime.now().strftime("%H:%M:%S"))
 
-    # ── Sesión ───────────────────────────────────────────────────────
-
     def mousePressEvent(self, event):
-        """Refresca la sesión cuando hay actividad del mouse."""
         self._refresh_session_activity()
         super().mousePressEvent(event)
 
     def keyPressEvent(self, event):
-        """Refresca la sesión cuando hay actividad del teclado."""
         self._refresh_session_activity()
         super().keyPressEvent(event)
 
     def _refresh_session_activity(self):
-        """Renovar sesión por actividad del usuario."""
         if self.controller.is_session_valid():
             self.controller.session_manager.refresh_session()
             logger.debug("Sesión renovada por actividad del usuario")
@@ -642,10 +736,6 @@ class HomeWindow(QMainWindow):
         win.show()
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  Diálogo reutilizable: Crear / Editar cuenta
-# ══════════════════════════════════════════════════════════════════════
-
 class _AccountDialog(QDialog):
     CATEGORIES = ["General", "Redes Sociales", "Bancos", "Correo", "Videojuegos", "Otros"]
 
@@ -666,7 +756,7 @@ class _AccountDialog(QDialog):
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("color: #3a3a3a;")
+        sep.setStyleSheet("color: #3f3f46;")
         layout.addWidget(sep)
 
         def add_field(label_text: str, widget: QWidget):
@@ -727,10 +817,6 @@ class _AccountDialog(QDialog):
         }
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  Diálogo generador de contraseña
-# ══════════════════════════════════════════════════════════════════════
-
 class _PasswordGeneratorDialog(QDialog):
     def __init__(self, parent, controller: HomeController):
         super().__init__(parent)
@@ -755,10 +841,10 @@ class _PasswordGeneratorDialog(QDialog):
         self._slider.setRange(8, 32)
         self._slider.setValue(16)
         self._slider.setStyleSheet("""
-            QSlider::groove:horizontal { background:#3a3a3a; height:4px; border-radius:2px; }
-            QSlider::handle:horizontal  { background:#0d9488; width:14px; height:14px;
+            QSlider::groove:horizontal { background:#3f3f46; height:4px; border-radius:2px; }
+            QSlider::handle:horizontal  { background:#6366f1; width:14px; height:14px;
                                           border-radius:7px; margin:-5px 0; }
-            QSlider::sub-page:horizontal { background:#0d9488; height:4px; border-radius:2px; }
+            QSlider::sub-page:horizontal { background:#6366f1; height:4px; border-radius:2px; }
         """)
         self._slider.valueChanged.connect(self._on_length_change)
         length_row.addWidget(self._length_lbl)
