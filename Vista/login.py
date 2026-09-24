@@ -90,8 +90,6 @@ def start_login(on_success_callback):
     window = LoginWindow(on_success_callback)
     window.show()
     return window
-
-
 # ══════════════════════════════════════════════════════════════════════
 #  Ventana principal de Login
 # ══════════════════════════════════════════════════════════════════════
@@ -150,7 +148,7 @@ class LoginWindow(QMainWindow):
 
     @staticmethod
     def _label(text: str, object_name: str = "field_label",
-               alignment=Qt.AlignLeft) -> QLabel:
+            alignment=Qt.AlignLeft) -> QLabel:
         lbl = QLabel(text)
         lbl.setObjectName(object_name)
         lbl.setAlignment(alignment)
@@ -267,7 +265,7 @@ class LoginWindow(QMainWindow):
 
         # Clave manual
         secret = (self.controller.current_user.totp_secret
-                  if self.controller.current_user else "")
+                if self.controller.current_user else "")
         layout.addWidget(self._label("O ingrese manualmente:", "field_label", Qt.AlignCenter))
         secret_lbl = QLabel(secret)
         secret_lbl.setObjectName("subtitle")
@@ -387,6 +385,6 @@ class LoginWindow(QMainWindow):
                                 self.controller.fernet_key)
         else:
             QMessageBox.critical(self, "Código incorrecto",
-                                 "El código TOTP es incorrecto o ha expirado.")
+                                "El código TOTP es incorrecto o ha expirado.")
             self._totp_entry.clear()
             self._totp_entry.setFocus()
