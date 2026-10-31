@@ -15,6 +15,27 @@ from Modelo.models import AdminUser
 
 logger = logging.getLogger(__name__)
 
+_CLIPBOARD_CLEAR_DELAY_MS = 10_000
+_clipboard_clear_timer: QTimer | None = None
+
+
+def _copy_text_with_expiry(text: str):
+    global _clipboard_clear_timer
+
+    clipboard = QApplication.clipboard()
+    if _clipboard_clear_timer is not None:
+        _clipboard_clear_timer.stop()
+        _clipboard_clear_timer.deleteLater()
+
+    clipboard.setText(text)
+    timer = QTimer(QApplication.instance())
+    timer.setSingleShot(True)
+    timer.timeout.connect(
+        lambda: clipboard.clear() if clipboard.text() == text else None
+    )
+    timer.start(_CLIPBOARD_CLEAR_DELAY_MS)
+    _clipboard_clear_timer = timer
+
 # ─────────────────────────── QSS Moderno & Pulido ────────────────────────────
 HOME_QSS = """
     QMainWindow { 
@@ -604,7 +625,7 @@ class HomeWindow(QMainWindow):
         layout.addWidget(pass_field)
 
         def copy_and_close():
-            QApplication.clipboard().setText(pwd)
+            _copy_text_with_expiry(pwd)
             QMessageBox.information(dlg, "Copiado", "Contraseña copiada al portapapeles.")
             dlg.accept()
 
@@ -882,6 +903,6 @@ class _PasswordGeneratorDialog(QDialog):
         )
 
     def _copy_and_close(self):
-        QApplication.clipboard().setText(self._pass_field.text())
+        _copy_text_with_expiry(self._pass_field.text())
         QMessageBox.information(self, "Copiado", "Contraseña copiada al portapapeles.")
         self.accept()
