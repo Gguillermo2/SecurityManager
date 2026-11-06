@@ -59,24 +59,37 @@ def decrypt_data_fernet(encrypted_data: str, fernet_key: bytes) -> str:
 # --- Generación de Contraseñas Fuertes ---
 
 def generate_strong_password(length: int = 12,
-                              use_uppercase: bool = True,
-                              use_lowercase: bool = True,
-                              use_digits: bool = True,
-                              use_symbols: bool = True) -> str:
-    characters = ""
+                            use_uppercase: bool = True,
+                            use_lowercase: bool = True,
+                            use_digits: bool = True,
+                            use_symbols: bool = True) -> str:
+    character_sets = []
     if use_lowercase:
-        characters += "abcdefghijklmnopqrstuvwxyz"
+        character_sets.append("abcdefghijklmnopqrstuvwxyz")
     if use_uppercase:
-        characters += "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        character_sets.append("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
     if use_digits:
-        characters += "0123456789"
+        character_sets.append("0123456789")
     if use_symbols:
-        characters += "!@#$%^&*()-_+=[]{}|;:,.<>?"
+        character_sets.append("!@#$%^&*()-_+=[]{}|;:,.<>?\"'")
 
-    if not characters:
+    if not character_sets:
         raise ValueError("Debe seleccionar al menos un tipo de caracter para la contraseña.")
+    if length < len(character_sets):
+        raise ValueError(
+            "La longitud debe permitir al menos un carácter por cada tipo seleccionado."
+        )
 
-    password = ''.join(secrets.choice(characters) for _ in range(length))
+    password_characters = [
+        secrets.choice(character_set) for character_set in character_sets
+    ]
+    all_characters = "".join(character_sets)
+    password_characters.extend(
+        secrets.choice(all_characters)
+        for _ in range(length - len(password_characters))
+    )
+    secrets.SystemRandom().shuffle(password_characters)
+    password = "".join(password_characters)
     logger.debug(f"Contraseña fuerte generada con longitud {length}")
     return password
 

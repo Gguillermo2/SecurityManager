@@ -17,3 +17,6 @@ PRO/
 *.tmp
 *.md
 *.png
+
+# Ignorar archviovos o carpetas
+/test/
