@@ -43,6 +43,38 @@ def get_connection():
 
 # ====================== INICIALIZACIÓN DE TABLAS ======================
 
+# DDL de la tabla de configuración de plataformas para la automatización web.
+# Se mantiene aquí (junto al resto del esquema) para centralizar la persistencia,
+# pero la lógica de negocio vive en automation/platform_config.py.
+PLATFORM_CONFIGS_DDL = """
+    CREATE TABLE IF NOT EXISTS platform_configs (
+        id                  TEXT PRIMARY KEY,
+        name                TEXT NOT NULL UNIQUE,
+        domain              TEXT NOT NULL,                   -- Host HTTPS autorizado (exacto)
+        alt_domains         TEXT NOT NULL DEFAULT '[]',      -- JSON: hosts alternativos exactos
+        login_url           TEXT NOT NULL,
+        username_selectors  TEXT NOT NULL DEFAULT '[]',      -- JSON: selectores del campo usuario
+        password_selectors  TEXT NOT NULL DEFAULT '[]',      -- JSON: selectores del campo contraseña
+        submit_selectors    TEXT NOT NULL DEFAULT '[]',      -- JSON: informativo (no se pulsa)
+        strategy            TEXT NOT NULL DEFAULT 'css',
+        aliases             TEXT NOT NULL DEFAULT '[]',      -- JSON: nombres alternativos de plataforma
+        enabled             INTEGER NOT NULL DEFAULT 1,
+        notes               TEXT,
+        created_at          TEXT,
+        updated_at          TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_platform_configs_name
+        ON platform_configs (name COLLATE NOCASE);
+"""
+
+
+def initialize_platform_configs_table():
+    """Crea (si no existe) la tabla de configuraciones de plataformas."""
+    with get_connection() as conn:
+        conn.executescript(PLATFORM_CONFIGS_DDL)
+
+
 def initialize_database():
     """
     Crea las tablas si no existen. Seguro para llamar en cada arranque
@@ -88,6 +120,7 @@ def initialize_database():
             CREATE INDEX IF NOT EXISTS idx_login_attempts_time
                 ON login_attempts (attempt_time);
         """)
+        conn.executescript(PLATFORM_CONFIGS_DDL)
     logger.info(f"Base de datos inicializada en: {DB_PATH}")
 
 

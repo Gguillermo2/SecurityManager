@@ -1,10 +1,13 @@
 # Controladores/home_controller.py
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from datetime import datetime
 
 from Modelo.models import AdminUser, Account
 from core.account_manager import AccountManager
 from core.session import SessionManager
+from automation.automation_service import AutomationService
+from automation.errors import AutomationError
+from automation.platform_config import PlatformConfig
 
 
 class HomeController:
@@ -17,6 +20,7 @@ class HomeController:
         # Managers
         self.session_manager = SessionManager()
         self.account_manager = AccountManager(fernet_key)
+        self.automation_service = AutomationService(self.account_manager)
 
         # Estado
         self.selected_account: Optional[Account] = None
@@ -87,7 +91,49 @@ class HomeController:
         return self.session_manager.is_session_valid()
 
     def logout(self):
+        self.automation_service.shutdown()
         self.session_manager.end_session()
+
+    # ====================== Automatización web ======================
+    # El controlador solo delega en AutomationService. La lógica de
+    # Playwright permanece aislada en el paquete `automation`.
+
+    def get_platform_configs(self, enabled_only: bool = False) -> List[PlatformConfig]:
+        return self.automation_service.list_configs(enabled_only=enabled_only)
+
+    def get_platform_config_for_account(self, account: Account) -> Optional[PlatformConfig]:
+        return self.automation_service.find_config_for_account(account)
+
+    def get_platform_config(self, config_id: str) -> Optional[PlatformConfig]:
+        return self.automation_service.get_config(config_id)
+
+    def save_platform_config(self, config: PlatformConfig) -> PlatformConfig:
+        return self.automation_service.save_config(config)
+
+    def delete_platform_config(self, config_id: str) -> bool:
+        return self.automation_service.delete_config(config_id)
+
+    def get_browser_options(self) -> List[Tuple[str, str]]:
+        return self.automation_service.browser_options()
+
+    def start_automated_login(self, account: Account,
+                              browser_key: str = "auto") -> bool:
+        """Inicia el rellenado automático del formulario en segundo plano."""
+        if not self.is_session_valid():
+            raise AutomationError(
+                "La sesión ha expirado. Inicia sesión nuevamente para "
+                "automatizar el acceso."
+            )
+        return self.automation_service.start_login(account, browser_key)
+
+    def stop_automation(self):
+        self.automation_service.stop()
+
+    def is_automation_running(self) -> bool:
+        return self.automation_service.is_running()
+
+    def shutdown_automation(self):
+        self.automation_service.shutdown()
 
     # ====================== Utilidades ======================
 

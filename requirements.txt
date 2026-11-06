@@ -6,3 +6,4 @@ pyside6_addons==6.9.3
 pyside6_essentials==6.9.3
 python_bcrypt==0.3.2
 qrcode==7.4.2
+playwright==1.64.1

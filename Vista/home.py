@@ -5,13 +5,16 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QLineEdit, QPushButton, QComboBox, QFrame,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QDialog, QTextEdit, QScrollArea, QSlider, QMessageBox, QApplication
+    QDialog, QTextEdit, QScrollArea, QSlider,QMessageBox, QApplication,
+    QGridLayout
 )
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtCore import Qt, QTimer
 
 from controller.home_controller import HomeController
 from Modelo.models import AdminUser
+from automation.errors import AutomationError
+from automation.platform_config import PlatformConfig, STRATEGY_LABELS
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +213,28 @@ HOME_QSS = """
     }
     QPushButton#btn_show_pass:hover { background-color: #52525b; }
 
+    QPushButton#btn_platforms {
+        background-color: #27272a;
+        color: #f4f4f5;
+        font-size: 11px;
+        border: 1px solid #3f3f46;
+        border-radius: 5px;
+        padding: 5px 10px;
+    }
+    QPushButton#btn_platforms:hover { background-color: #3f3f46; }
+
+    QPushButton#btn_automation {
+        background-color: #0ea5e9;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 600;
+        border: none;
+        border-radius: 6px;
+        padding: 6px 14px;
+    }
+    QPushButton#btn_automation:hover    { background-color: #0284c7; }
+    QPushButton#btn_automation:disabled { background-color: #27272a; color: #71717a; }
+
     QPushButton#btn_primary {
         background-color: #6366f1; 
         color: #ffffff;
@@ -281,6 +306,7 @@ class HomeWindow(QMainWindow):
         self.setStyleSheet(HOME_QSS)
 
         self._build_ui()
+        self._connect_automation_signals()
         self.refresh_accounts_list()
         self._start_session_timer()
 
@@ -329,6 +355,15 @@ class HomeWindow(QMainWindow):
         user_lbl = QLabel(f"👤  {self.controller.admin_user.username}")
         user_lbl.setObjectName("header_user")
         hl.addWidget(user_lbl)
+
+        platforms_btn = QPushButton("⚙  Plataformas")
+        platforms_btn.setObjectName("btn_platforms")
+        platforms_btn.setCursor(Qt.PointingHandCursor)
+        platforms_btn.setToolTip(
+            "Administrar dominios, URLs y selectores de las plataformas"
+        )
+        platforms_btn.clicked.connect(self.open_platforms_manager)
+        hl.addWidget(platforms_btn)
 
         logout_btn = QPushButton("Cerrar Sesión")
         logout_btn.setObjectName("btn_logout")
@@ -433,6 +468,16 @@ class HomeWindow(QMainWindow):
         self._delete_btn.setEnabled(False)
         self._delete_btn.clicked.connect(self.delete_account)
         actions.addWidget(self._delete_btn)
+
+        self._automation_btn = QPushButton("🌐  Iniciar sesión")
+        self._automation_btn.setObjectName("btn_automation")
+        self._automation_btn.setCursor(Qt.PointingHandCursor)
+        self._automation_btn.setEnabled(False)
+        self._automation_btn.setToolTip(
+            "Abre el navegador y rellena el formulario de la plataforma"
+        )
+        self._automation_btn.clicked.connect(self.open_automation_dialog)
+        actions.addWidget(self._automation_btn)
 
         actions.addStretch()
 
@@ -597,11 +642,13 @@ class HomeWindow(QMainWindow):
             self.show_account_details()
             self._edit_btn.setEnabled(True)
             self._delete_btn.setEnabled(True)
+            self._automation_btn.setEnabled(True)
 
     def clear_details_panel(self):
         self._show_placeholder()
         self._edit_btn.setEnabled(False)
         self._delete_btn.setEnabled(False)
+        self._automation_btn.setEnabled(False)
         self.selected_account = None
 
     def show_password(self):
@@ -715,6 +762,54 @@ class HomeWindow(QMainWindow):
         dlg = _PasswordGeneratorDialog(self, self.controller)
         dlg.exec()
 
+    # ====================== Automatización web ======================
+
+    def open_automation_dialog(self):
+        if not self.selected_account:
+            QMessageBox.warning(self, "Sin selección",
+                                "Seleccione una cuenta para iniciar sesión.")
+            return
+        if not self.controller.is_session_valid():
+            QMessageBox.warning(self, "Sesión expirada",
+                                "Inicie sesión nuevamente para continuar.")
+            self.logout()
+            return
+        dlg = _AutomationDialog(self, self.controller, self.selected_account)
+        dlg.exec()
+
+    def open_platforms_manager(self):
+        dlg = _PlatformsManagerDialog(self, self.controller)
+        dlg.exec()
+
+    def _connect_automation_signals(self):
+        service = self.controller.automation_service
+        service.status_changed.connect(self._on_automation_status)
+        service.login_ready.connect(self._on_automation_ready)
+        service.login_failed.connect(self._on_automation_failed)
+        service.browser_closed.connect(self._on_automation_closed)
+
+    def _on_automation_status(self, text: str):
+        self._status_lbl.setText(text)
+
+    def _on_automation_ready(self, text: str):
+        self._status_lbl.setText(text)
+        logger.info("Automatización de login completada correctamente.")
+
+    def _on_automation_failed(self, text: str):
+        self._status_lbl.setText(text)
+        logger.warning("Automatización de login fallida: %s", text)
+
+    def _on_automation_closed(self):
+        self._automation_btn.setEnabled(self.selected_account is not None)
+        self._update_status_bar()
+
+    def closeEvent(self, event):
+        try:
+            self.controller.shutdown_automation()
+        except Exception:
+            logger.debug("Error cerrando la automatización", exc_info=False)
+        super().closeEvent(event)
+
     def _update_status_bar(self):
         summary = self.controller.get_accounts_summary()
         parts = [f"Total: {summary['total']}"]
@@ -761,10 +856,10 @@ class _AccountDialog(QDialog):
     CATEGORIES = ["General", "Redes Sociales", "Bancos", "Correo", "Videojuegos", "Otros"]
 
     def __init__(self, parent=None, title="Cuenta",
-                 platform="", user="", category="General", notes=""):
+                platform="", user="", category="General", notes=""):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setFixedSize(480, 500)
+        self.setFixedSize(480, 520)
         self.setModal(True)
 
         layout = QVBoxLayout(self)
@@ -837,6 +932,13 @@ class _AccountDialog(QDialog):
             "notes": self._notes.toPlainText().strip(),
         }
 
+    def _generate_password(self):
+        self._password.setText(
+            self.parent().controller.suggest_strong_password(
+                self._password_length.value()
+            )
+        )
+
 
 class _PasswordGeneratorDialog(QDialog):
     def __init__(self, parent, controller: HomeController):
@@ -906,3 +1008,629 @@ class _PasswordGeneratorDialog(QDialog):
         _copy_text_with_expiry(self._pass_field.text())
         QMessageBox.information(self, "Copiado", "Contraseña copiada al portapapeles.")
         self.accept()
+
+
+# ====================== Diálogos de automatización ======================
+
+
+def _format_validation_error(exc: Exception) -> str:
+    """Convierte errores de Pydantic/PlatformConfig en texto legible."""
+    errors = getattr(exc, "errors", None)
+    if callable(errors):
+        try:
+            messages = []
+            for error in errors()[:5]:
+                messages.append(f"• {error.get('msg', 'Valor no válido')}")
+            if messages:
+                return "\n".join(messages)
+        except Exception:
+            pass
+    return str(exc)
+
+
+class _AutomationDialog(QDialog):
+    """Diálogo para lanzar el rellenado automático del formulario."""
+
+    def __init__(self, parent, controller: HomeController, account):
+        super().__init__(parent)
+        self.controller = controller
+        self.service = controller.automation_service
+        self.account = account
+        self._config = None
+        self._connected = False
+
+        self.setWindowTitle("Inicio de sesión automatizado")
+        self.setMinimumSize(620, 500)
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(12)
+
+        title = QLabel("🌐  Inicio de sesión automatizado")
+        title.setObjectName("section_title")
+        layout.addWidget(title)
+
+        subtitle = QLabel(
+            "La aplicación abrirá el navegador y rellenará usuario y contraseña. "
+            "El envío del formulario y cualquier CAPTCHA/2FA son manuales."
+        )
+        subtitle.setObjectName("detail_key")
+        subtitle.setWordWrap(True)
+        layout.addWidget(subtitle)
+
+        info = QGridLayout()
+        info.setHorizontalSpacing(12)
+        info.setVerticalSpacing(6)
+
+        def add_info(row: int, key: str, value_widget: QWidget):
+            key_lbl = QLabel(key)
+            key_lbl.setObjectName("detail_key")
+            key_lbl.setFixedWidth(110)
+            info.addWidget(key_lbl, row, 0, Qt.AlignTop)
+            info.addWidget(value_widget, row, 1)
+
+        add_info(0, "Plataforma:", QLabel(account.platform))
+        add_info(1, "Usuario:", QLabel(account.email_or_username))
+
+        self._config_lbl = QLabel("")
+        self._config_lbl.setWordWrap(True)
+        add_info(2, "Configuración:", self._config_lbl)
+
+        self._config_btn = QPushButton("⚙  Configurar plataforma")
+        self._config_btn.setObjectName("btn_secondary")
+        self._config_btn.setCursor(Qt.PointingHandCursor)
+        self._config_btn.clicked.connect(self._configure_platform)
+        info.addWidget(self._config_btn, 3, 1, Qt.AlignLeft)
+        layout.addLayout(info)
+
+        browser_row = QHBoxLayout()
+        browser_lbl = QLabel("Navegador:")
+        browser_lbl.setObjectName("detail_key")
+        browser_lbl.setFixedWidth(110)
+        self._browser_combo = QComboBox()
+        for key, label in self.service.browser_options():
+            self._browser_combo.addItem(label, key)
+        browser_row.addWidget(browser_lbl)
+        browser_row.addWidget(self._browser_combo, 1)
+        layout.addLayout(browser_row)
+
+        security_note = QLabel(
+            "🔒  Solo se rellenan campos si la URL es HTTPS y el host coincide "
+            "exactamente con el dominio autorizado de la plataforma."
+        )
+        security_note.setObjectName("detail_key")
+        security_note.setWordWrap(True)
+        layout.addWidget(security_note)
+
+        self._log = QTextEdit()
+        self._log.setReadOnly(True)
+        self._log.setFixedHeight(140)
+        self._log.setPlaceholderText("El progreso de la automatización aparecerá aquí…")
+        layout.addWidget(self._log, 1)
+
+        buttons = QHBoxLayout()
+        self._start_btn = QPushButton("🌐  Abrir y rellenar")
+        self._start_btn.setObjectName("btn_automation")
+        self._start_btn.setCursor(Qt.PointingHandCursor)
+        self._start_btn.clicked.connect(self._start)
+
+        self._stop_btn = QPushButton("Cerrar navegador")
+        self._stop_btn.setObjectName("btn_secondary")
+        self._stop_btn.setCursor(Qt.PointingHandCursor)
+        self._stop_btn.clicked.connect(self._stop)
+
+        close_btn = QPushButton("Cerrar")
+        close_btn.setObjectName("btn_secondary")
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.clicked.connect(self.accept)
+
+        buttons.addWidget(self._start_btn)
+        buttons.addWidget(self._stop_btn)
+        buttons.addStretch()
+        buttons.addWidget(close_btn)
+        layout.addLayout(buttons)
+
+        self._refresh_config_info()
+        self._connect_signals()
+        self._update_buttons()
+
+    # -------------------- Estado de la configuración --------------------
+
+    def _refresh_config_info(self):
+        self._config = self.service.find_config_for_account(self.account)
+        if self._config is not None:
+            self._config_lbl.setText(
+                f"{self._config.name} — {self._config.domain}"
+            )
+            self._config_lbl.setStyleSheet("color: #10b981;")
+            self._config_btn.setVisible(False)
+        else:
+            self._config_lbl.setText(
+                f"No hay configuración para '{self.account.platform}'. "
+                "Créala para indicar el dominio y los selectores del formulario."
+            )
+            self._config_lbl.setStyleSheet("color: #f59e0b;")
+            self._config_btn.setVisible(True)
+        self._update_buttons()
+
+    def _configure_platform(self):
+        dlg = _PlatformConfigDialog(
+            self,
+            default_name=self.account.platform,
+        )
+        if dlg.exec() == QDialog.Accepted:
+            config = dlg.get_config()
+            try:
+                self.controller.save_platform_config(config)
+            except ValueError as exc:
+                QMessageBox.warning(
+                    self, "No se pudo guardar", _format_validation_error(exc)
+                )
+                return
+            self._append(f"Configuración guardada para '{config.name}'.")
+            self._refresh_config_info()
+
+    # -------------------- Acciones --------------------
+
+    def _start(self):
+        if self.service.is_running():
+            QMessageBox.information(
+                self, "Automatización en curso",
+                "Ya hay un navegador administrado por la aplicación. "
+                "Ciérralo antes de iniciar otra automatización.",
+            )
+            return
+
+        if self._config is None:
+            self._configure_platform()
+            if self._config is None:
+                return
+
+        browser_key = self._browser_combo.currentData()
+        try:
+            self.controller.start_automated_login(self.account, browser_key)
+        except AutomationError as exc:
+            QMessageBox.warning(self, "Automatización no disponible", str(exc))
+            self._update_buttons()
+            return
+        except Exception:
+            logger.exception("Error iniciando la automatización")
+            QMessageBox.critical(
+                self, "Error",
+                "No se pudo iniciar la automatización. Revisa los registros.",
+            )
+            self._update_buttons()
+            return
+
+        self._append("Automatización iniciada…")
+        self._update_buttons()
+
+    def _stop(self):
+        self.service.stop()
+        self._append("Solicitando el cierre del navegador…")
+        self._update_buttons()
+
+    # -------------------- Señales --------------------
+
+    def _connect_signals(self):
+        self.service.status_changed.connect(self._on_status)
+        self.service.login_ready.connect(self._on_ready)
+        self.service.login_failed.connect(self._on_failed)
+        self.service.browser_closed.connect(self._on_closed)
+        self._connected = True
+
+    def _disconnect_signals(self):
+        if not self._connected:
+            return
+        for signal, slot in (
+            (self.service.status_changed, self._on_status),
+            (self.service.login_ready, self._on_ready),
+            (self.service.login_failed, self._on_failed),
+            (self.service.browser_closed, self._on_closed),
+        ):
+            try:
+                signal.disconnect(slot)
+            except (TypeError, RuntimeError):
+                pass
+        self._connected = False
+
+    def _on_status(self, text: str):
+        self._append(text)
+        self._update_buttons()
+
+    def _on_ready(self, text: str):
+        self._append(f"✅  {text}")
+        self._update_buttons()
+        QMessageBox.information(self, "Formulario completado", text)
+
+    def _on_failed(self, text: str):
+        self._append(f"❌  {text}")
+        self._update_buttons()
+        QMessageBox.warning(self, "Automatización no completada", text)
+
+    def _on_closed(self):
+        self._append("Navegador cerrado.")
+        self._update_buttons()
+
+    def _update_buttons(self):
+        running = self.service.is_running()
+        self._start_btn.setEnabled(not running)
+        self._stop_btn.setEnabled(running)
+        self._browser_combo.setEnabled(not running)
+        self._config_btn.setEnabled(not running)
+
+    def _append(self, text: str):
+        stamp = datetime.now().strftime("%H:%M:%S")
+        self._log.append(f"[{stamp}] {text}")
+
+    def done(self, result):
+        # Cubre aceptar, rechazar y cierre de ventana: evita que el diálogo
+        # oculto siga recibiendo señales de la automatización.
+        self._disconnect_signals()
+        super().done(result)
+
+    def closeEvent(self, event):
+        self._disconnect_signals()
+        super().closeEvent(event)
+
+
+class _PlatformConfigDialog(QDialog):
+    """Editor de una configuración de plataforma (sin credenciales)."""
+
+    def __init__(self, parent=None, config: PlatformConfig | None = None,
+                 default_name: str = ""):
+        super().__init__(parent)
+        self._config = config
+        self._result: PlatformConfig | None = None
+
+        self.setWindowTitle(
+            f"Editar plataforma – {config.name}" if config else "Nueva plataforma"
+        )
+        self.resize(640, 720)
+        self.setModal(True)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(20, 18, 20, 18)
+        outer.setSpacing(12)
+
+        title = QLabel("⚙  Configuración de plataforma")
+        title.setObjectName("section_title")
+        outer.addWidget(title)
+
+        hint = QLabel(
+            "Define el dominio HTTPS autorizado, la URL de login y los selectores "
+            "del formulario. No se guardan credenciales aquí."
+        )
+        hint.setObjectName("detail_key")
+        hint.setWordWrap(True)
+        outer.addWidget(hint)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        inner = QWidget()
+        inner.setStyleSheet("background:transparent;")
+        form = QVBoxLayout(inner)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setSpacing(8)
+        scroll.setWidget(inner)
+        outer.addWidget(scroll, 1)
+
+        def add_field(label_text: str, widget: QWidget, hint_text: str = ""):
+            lbl = QLabel(label_text)
+            lbl.setObjectName("detail_key")
+            form.addWidget(lbl)
+            form.addWidget(widget)
+            if hint_text:
+                hint_lbl = QLabel(hint_text)
+                hint_lbl.setObjectName("detail_key")
+                hint_lbl.setWordWrap(True)
+                hint_lbl.setStyleSheet("color: #71717a; font-size: 11px;")
+                form.addWidget(hint_lbl)
+
+        self._name = QLineEdit(config.name if config else default_name)
+        self._name.setPlaceholderText("Ej: Gmail, GitHub, Netflix…")
+        add_field("Nombre de la plataforma *", self._name)
+
+        self._domain = QLineEdit(config.domain if config else "")
+        self._domain.setPlaceholderText("accounts.google.com")
+        add_field(
+            "Dominio HTTPS autorizado *", self._domain,
+            "Comparación exacta de host. No incluyas 'https://' ni rutas.",
+        )
+
+        self._alt_domains = QLineEdit(
+            ", ".join(config.alt_domains) if config else ""
+        )
+        self._alt_domains.setPlaceholderText("www.ejemplo.com, ejemplo.com")
+        add_field(
+            "Dominios alternativos", self._alt_domains,
+            "Separados por comas. También se comparan de forma exacta.",
+        )
+
+        self._login_url = QLineEdit(config.login_url if config else "https://")
+        self._login_url.setPlaceholderText("https://accounts.google.com/signin")
+        add_field(
+            "URL de inicio de sesión *", self._login_url,
+            "Debe usar HTTPS y pertenecer a uno de los dominios autorizados.",
+        )
+
+        self._aliases = QLineEdit(", ".join(config.aliases) if config else "")
+        self._aliases.setPlaceholderText("gmail, google, correo google")
+        add_field(
+            "Alias de plataforma", self._aliases,
+            "Nombres de cuenta que deben usar esta configuración (separados por comas).",
+        )
+
+        self._strategy = QComboBox()
+        for key, label in self._strategy_options():
+            self._strategy.addItem(label, key)
+        if config:
+            index = self._strategy.findData(config.strategy)
+            self._strategy.setCurrentIndex(max(index, 0))
+        add_field("Estrategia de identificación", self._strategy)
+
+        self._username_selectors = QTextEdit()
+        self._username_selectors.setFixedHeight(70)
+        self._username_selectors.setPlaceholderText('input[type="email"]\n#login_field')
+        if config:
+            self._username_selectors.setPlainText(
+                "\n".join(config.username_selectors)
+            )
+        add_field(
+            "Selectores del campo de usuario *", self._username_selectors,
+            "Uno por línea. Se usa el primero visible y editable.",
+        )
+
+        self._password_selectors = QTextEdit()
+        self._password_selectors.setFixedHeight(70)
+        self._password_selectors.setPlaceholderText('input[type="password"]\n#password')
+        if config:
+            self._password_selectors.setPlainText(
+                "\n".join(config.password_selectors)
+            )
+        add_field(
+            "Selectores del campo de contraseña *", self._password_selectors,
+            "Uno por línea. Se usa el primero visible y editable.",
+        )
+
+        self._submit_selectors = QTextEdit()
+        self._submit_selectors.setFixedHeight(55)
+        self._submit_selectors.setPlaceholderText('button[type="submit"]')
+        if config:
+            self._submit_selectors.setPlainText(
+                "\n".join(config.submit_selectors)
+            )
+        add_field(
+            "Selectores del botón de envío (opcional)", self._submit_selectors,
+            "Solo informativo: la aplicación nunca pulsa el botón de envío.",
+        )
+
+        self._enabled = QComboBox()
+        self._enabled.addItem("Sí", True)
+        self._enabled.addItem("No", False)
+        if config and not config.enabled:
+            self._enabled.setCurrentIndex(1)
+        add_field("Automatización activa", self._enabled)
+
+        self._notes = QTextEdit()
+        self._notes.setFixedHeight(60)
+        if config and config.notes:
+            self._notes.setPlainText(config.notes)
+        add_field("Notas", self._notes)
+
+        buttons = QHBoxLayout()
+        cancel_btn = QPushButton("Cancelar")
+        cancel_btn.setObjectName("btn_secondary")
+        cancel_btn.clicked.connect(self.reject)
+        save_btn = QPushButton("Guardar")
+        save_btn.setObjectName("btn_primary")
+        save_btn.clicked.connect(self._save)
+        buttons.addWidget(cancel_btn)
+        buttons.addStretch()
+        buttons.addWidget(save_btn)
+        outer.addLayout(buttons)
+
+    @staticmethod
+    def _strategy_options():
+        from automation.automation_service import AutomationService
+
+        return AutomationService.strategy_options()
+
+    def _save(self):
+        try:
+            self._result = self._collect()
+        except ValueError as exc:
+            QMessageBox.warning(
+                self, "Configuración no válida", _format_validation_error(exc)
+            )
+            return
+        self.accept()
+
+    def _collect(self) -> PlatformConfig:
+        data = {
+            "name": self._name.text().strip(),
+            "domain": self._domain.text().strip(),
+            "alt_domains": [
+                part.strip()
+                for part in self._alt_domains.text().split(",")
+                if part.strip()
+            ],
+            "login_url": self._login_url.text().strip(),
+            "username_selectors": [
+                line.strip()
+                for line in self._username_selectors.toPlainText().splitlines()
+                if line.strip()
+            ],
+            "password_selectors": [
+                line.strip()
+                for line in self._password_selectors.toPlainText().splitlines()
+                if line.strip()
+            ],
+            "submit_selectors": [
+                line.strip()
+                for line in self._submit_selectors.toPlainText().splitlines()
+                if line.strip()
+            ],
+            "strategy": self._strategy.currentData(),
+            "aliases": [
+                part.strip()
+                for part in self._aliases.text().split(",")
+                if part.strip()
+            ],
+            "enabled": bool(self._enabled.currentData()),
+            "notes": self._notes.toPlainText().strip() or None,
+        }
+        if self._config is not None:
+            data["id"] = self._config.id
+            data["created_at"] = self._config.created_at
+        return PlatformConfig(**data)
+
+    def get_config(self) -> PlatformConfig:
+        return self._result
+
+
+class _PlatformsManagerDialog(QDialog):
+    """Listado y mantenimiento de configuraciones de plataformas."""
+
+    def __init__(self, parent, controller: HomeController):
+        super().__init__(parent)
+        self.controller = controller
+        self._row_map: dict[int, str] = {}
+
+        self.setWindowTitle("Plataformas de automatización")
+        self.resize(720, 480)
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(10)
+
+        title = QLabel("⚙  Plataformas configuradas")
+        title.setObjectName("section_title")
+        layout.addWidget(title)
+
+        hint = QLabel(
+            "Cada plataforma define su dominio autorizado, URL de login y "
+            "selectores. Las contraseñas siguen cifradas en las cuentas."
+        )
+        hint.setObjectName("detail_key")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self._table = QTableWidget()
+        self._table.setColumnCount(4)
+        self._table.setHorizontalHeaderLabels(
+            ["Plataforma", "Dominio", "Estrategia", "Activa"]
+        )
+        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self._table.verticalHeader().setVisible(False)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self._table.setShowGrid(False)
+        self._table.doubleClicked.connect(lambda _: self._edit())
+        layout.addWidget(self._table, 1)
+
+        buttons = QHBoxLayout()
+        new_btn = QPushButton("＋  Nueva")
+        new_btn.setObjectName("btn_new")
+        new_btn.clicked.connect(self._add)
+        edit_btn = QPushButton("✏  Editar")
+        edit_btn.setObjectName("btn_edit")
+        edit_btn.clicked.connect(self._edit)
+        delete_btn = QPushButton("🗑  Eliminar")
+        delete_btn.setObjectName("btn_delete")
+        delete_btn.clicked.connect(self._delete)
+        close_btn = QPushButton("Cerrar")
+        close_btn.setObjectName("btn_secondary")
+        close_btn.clicked.connect(self.accept)
+
+        buttons.addWidget(new_btn)
+        buttons.addWidget(edit_btn)
+        buttons.addWidget(delete_btn)
+        buttons.addStretch()
+        buttons.addWidget(close_btn)
+        layout.addLayout(buttons)
+
+        self._refresh()
+
+    def _refresh(self):
+        configs = self.controller.get_platform_configs()
+        self._table.setRowCount(0)
+        self._row_map = {}
+        for row, config in enumerate(configs):
+            self._table.insertRow(row)
+            self._table.setItem(row, 0, QTableWidgetItem(config.name))
+            self._table.setItem(row, 1, QTableWidgetItem(config.domain))
+            self._table.setItem(
+                row, 2,
+                QTableWidgetItem(STRATEGY_LABELS.get(config.strategy, config.strategy)),
+            )
+            self._table.setItem(row, 3, QTableWidgetItem("Sí" if config.enabled else "No"))
+            self._row_map[row] = config.id
+
+    def _selected_id(self) -> str | None:
+        row = self._table.currentRow()
+        if row < 0:
+            return None
+        return self._row_map.get(row)
+
+    def _add(self):
+        dlg = _PlatformConfigDialog(self)
+        if dlg.exec() == QDialog.Accepted:
+            try:
+                self.controller.save_platform_config(dlg.get_config())
+            except ValueError as exc:
+                QMessageBox.warning(
+                    self, "No se pudo guardar", _format_validation_error(exc)
+                )
+                return
+            self._refresh()
+
+    def _edit(self):
+        config_id = self._selected_id()
+        if not config_id:
+            QMessageBox.warning(self, "Sin selección",
+                                "Seleccione una plataforma para editar.")
+            return
+        config = self.controller.get_platform_config(config_id)
+        if config is None:
+            QMessageBox.warning(self, "No encontrada",
+                                "La configuración ya no existe.")
+            self._refresh()
+            return
+        dlg = _PlatformConfigDialog(self, config=config)
+        if dlg.exec() == QDialog.Accepted:
+            try:
+                self.controller.save_platform_config(dlg.get_config())
+            except ValueError as exc:
+                QMessageBox.warning(
+                    self, "No se pudo guardar", _format_validation_error(exc)
+                )
+                return
+            self._refresh()
+
+    def _delete(self):
+        config_id = self._selected_id()
+        if not config_id:
+            QMessageBox.warning(self, "Sin selección",
+                                "Seleccione una plataforma para eliminar.")
+            return
+        reply = QMessageBox.question(
+            self, "Confirmar eliminación",
+            "¿Eliminar esta configuración de plataforma?\n"
+            "Las cuentas guardadas no se verán afectadas.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            if self.controller.delete_platform_config(config_id):
+                self._refresh()
+            else:
+                QMessageBox.critical(
+                    self, "Error", "No se pudo eliminar la configuración."
+                )
